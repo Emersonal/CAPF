@@ -73,6 +73,10 @@ export function computeAttackProbabilityNoSignal(
  *
  * In the catastrophic regime (high θ), Harm ≈ V/2, simplifying the equation.
  *
+ * Signaling strategy: signal iff K̂ ≤ K < k*(0)
+ * - Below K̂: cost exceeds benefit, don't signal
+ * - Above k*(0): will attack anyway, don't need to signal
+ *
  * We solve this numerically using bisection.
  */
 export function computeSignalingCutoff(
@@ -88,28 +92,38 @@ export function computeSignalingCutoff(
     return 1 - normalCDF((kStar - w) / sigma);
   };
 
-  // ΔA(K) = A(0) - A(K)
+  // ΔA(K) = A(0) - A(K) - reduction in opponent attack probability from signaling K
+  // As K increases, opponent's k*(K) increases, so A(K) decreases, so ΔA(K) increases
   const deltaA = (K: number): number => A(0) - A(K);
 
   // Expected cost of minor conflict when revealing K
   // L(K) ≈ c_m + E[K·K_j/(K + K_j)]
-  // For simplicity, approximate as c_m + K/2 (rough approximation)
-  // More accurate would require integration over K_j distribution
-  const L = (K: number): number => c_m + K / 4;
+  // Approximation: c_m + K·w/(K+w) which approaches c_m + w/2 for large K
+  const L = (K: number): number => c_m + (K * w) / (K + w + 0.01);
 
-  // Benefit: ΔA(K) · V/2
+  // Benefit: ΔA(K) · V/2 (deterrence value in catastrophic regime)
   const benefit = (K: number): number => deltaA(K) * V / 2;
 
-  // Find K̂ where benefit(K̂) = L(K̂) using bisection
+  // Search bounds
   let lo = 0;
   let hi = kStarNoSignal;
 
-  // If benefit at 0 is less than cost, no one signals
-  if (benefit(lo) < L(lo)) {
-    return kStarNoSignal; // Signaling cutoff equals attack cutoff (no signaling region)
+  // Check if signaling is ever beneficial
+  // At K near k*(0), ΔA is maximized. If even then benefit < cost, no signaling region.
+  const testPoint = kStarNoSignal * 0.99; // Just below attack cutoff
+  if (benefit(testPoint) < L(testPoint)) {
+    return kStarNoSignal; // No signaling region
   }
 
-  // Bisection search
+  // Check if signaling is beneficial even at very low K
+  // If so, K̂ ≈ 0 (everyone signals)
+  if (benefit(w * 0.5) >= L(w * 0.5)) {
+    lo = 0;
+  } else {
+    lo = w * 0.5;
+  }
+
+  // Bisection to find K̂ where benefit(K̂) = L(K̂)
   for (let i = 0; i < 50; i++) {
     const mid = (lo + hi) / 2;
     const netBenefit = benefit(mid) - L(mid);
@@ -118,10 +132,14 @@ export function computeSignalingCutoff(
       return mid;
     }
 
+    // benefit increases with K, L also increases with K
+    // We want to find where they cross
+    // If netBenefit > 0 at mid, signaling is beneficial there, so K̂ < mid
+    // If netBenefit < 0 at mid, signaling not beneficial, so K̂ > mid
     if (netBenefit > 0) {
-      lo = mid; // Signaling is still beneficial, raise cutoff
+      hi = mid; // K̂ is below mid
     } else {
-      hi = mid; // Signaling not worth it, lower cutoff
+      lo = mid; // K̂ is above mid
     }
   }
 
@@ -130,21 +148,28 @@ export function computeSignalingCutoff(
 
 /**
  * Compute probability of catastrophe (war without DSA)
- * This occurs when both states attack but neither has DSA
+ * Catastrophe = at least one state attacks AND neither has DSA
+ *
+ * P(Catastrophe) = P(War) × P(|K₁ - K₂| < T | War)
+ *
+ * We approximate by: P(War) × P(|K₁ - K₂| < T)
+ * This slightly overestimates since war is more likely when gaps are large.
  */
-export function computeCatastropheProbability(params: ModelParameters): number {
+export function computeCatastropheProbability(
+  params: ModelParameters,
+  warProbability: number
+): number {
   const { sigma, T } = params;
 
-  // Probability that |K_1 - K_2| < T (neither has DSA)
-  // K_1 - K_2 ~ N(0, 2σ²)
+  // Probability that neither has DSA: |K_1 - K_2| < T
+  // K_1 - K_2 ~ N(0, 2σ²) since K_i = w + ε_i with ε_i ~ N(0, σ²) i.i.d.
   const combinedSigma = sigma * Math.sqrt(2);
 
-  // P(|K_1 - K_2| < T) = P(-T < K_1 - K_2 < T) = Φ(T/√2σ) - Φ(-T/√2σ)
-  const probNoDSA = normalCDF(T / combinedSigma) - normalCDF(-T / combinedSigma);
+  // P(|K_1 - K_2| < T) = P(-T < K_1 - K_2 < T) = 2Φ(T/√2σ) - 1
+  const probNoDSA = 2 * normalCDF(T / combinedSigma) - 1;
 
-  // This is a rough approximation - actual calculation requires
-  // integrating over the joint distribution of attack decisions
-  return probNoDSA * 0.1; // Scale factor for rough estimate
+  // P(Catastrophe) ≈ P(War) × P(neither has DSA)
+  return warProbability * probNoDSA;
 }
 
 /**
@@ -172,30 +197,40 @@ export function computeMinorConflictProbability(
  * Compute full equilibrium prediction from parameters
  */
 export function computeEquilibrium(params: ModelParameters): EquilibriumPrediction {
-  const { V, theta } = params;
+  const { V, theta, w, sigma } = params;
 
-  // 1. Compute attack threshold
+  // 1. Compute attack threshold τ = (V/2 + θ)/(V + θ)
   const tau = computeTau(V, theta);
 
-  // 2. Compute attack cutoff with no signal
+  // 2. Compute attack cutoff with no signal: k*(0)
   const attackCutoffNoSignal = computeAttackCutoff(params, 0, tau);
 
-  // 3. Compute signaling cutoff
+  // 3. Compute signaling cutoff K̂
   const signalingCutoff = computeSignalingCutoff(params, tau, attackCutoffNoSignal);
 
   // 4. Compute probabilities
-  const attackProbability = computeAttackProbabilityNoSignal(params, attackCutoffNoSignal);
+  // P(one state doesn't attack) = Φ((k*(0) - w)/σ)
+  const oneStateNoAttackProb = normalCDF((attackCutoffNoSignal - w) / sigma);
+
+  // P(Peace) = P(neither attacks) = [P(one doesn't attack)]² (symmetric, independent)
+  const peaceProbability = Math.pow(oneStateNoAttackProb, 2);
+
+  // P(War) = P(at least one attacks) = 1 - P(Peace)
+  const warProbability = 1 - peaceProbability;
+
+  // Minor conflict probability
   const minorConflictProbability = computeMinorConflictProbability(
     params,
     signalingCutoff,
     attackCutoffNoSignal
   );
-  const catastropheProbability = computeCatastropheProbability(params);
-  const peaceProbability = Math.max(0, 1 - attackProbability);
+
+  // Catastrophe = war AND neither has DSA
+  const catastropheProbability = computeCatastropheProbability(params, warProbability);
 
   return {
     tau,
-    attackProbability,
+    attackProbability: warProbability, // P(at least one attacks)
     minorConflictProbability,
     peaceProbability,
     catastropheProbability,

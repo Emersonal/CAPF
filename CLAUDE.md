@@ -1,4 +1,4 @@
-# CAPF: Competitive AI Policy Framework Visualization
+# DSA Simulator: Decisive Strategic Advantage Signaling Model
 
 ## Project Vision
 An interactive visualization/game modeling geopolitical conflict dynamics around transformative AI, based on CAIS' MAIM model and related game-theoretic literature. The core insight: small changes to assumptions produce wildly different equilibria.

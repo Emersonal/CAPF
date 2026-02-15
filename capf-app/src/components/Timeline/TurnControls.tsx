@@ -3,7 +3,7 @@
  * Includes run button, auto-play toggle, and history log
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import {
   useRound,
   useHistory,
@@ -68,13 +68,6 @@ export function TurnControls() {
   const runRound = useRunRound();
   const togglePlay = useTogglePlay();
   const reset = useReset();
-
-  const historyEndRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to latest result
-  useEffect(() => {
-    historyEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [history.length]);
 
   // Auto-play interval
   useEffect(() => {
@@ -164,7 +157,6 @@ export function TurnControls() {
               .map((outcome) => (
                 <RoundSummary key={outcome.round} outcome={outcome} />
               ))}
-            <div ref={historyEndRef} />
           </>
         )}
       </div>

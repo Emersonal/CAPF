@@ -210,17 +210,25 @@ export function generateReasoning(
   const kStar2 = actor2.attackCutoff.toFixed(2);
   const signalingCutoff = equilibrium.signalingCutoff.toFixed(2);
 
+  const kStarNoSignal = equilibrium.attackCutoffNoSignal.toFixed(2);
+
+  // State 1 analysis: distinguish between weak (K < K̂), intermediate (signaled), and strong (K ≥ k*(0))
   const state1Analysis = actor1.majorAttackChoice
     ? `${actor1.name} attacked: K=${K1} ≥ k*=${kStar1}`
     : actor1.minorConflictChoice > 0
       ? `${actor1.name} signaled (K=${K1}), but K < k*=${kStar1}`
-      : `${actor1.name} stayed quiet: K=${K1} < K̂=${signalingCutoff}`;
+      : actor1.privateCapability >= equilibrium.attackCutoffNoSignal
+        ? `${actor1.name} didn't signal: K=${K1} ≥ k*(0)=${kStarNoSignal}, attacking anyway`
+        : `${actor1.name} stayed quiet: K=${K1} < K̂=${signalingCutoff}`;
 
+  // State 2 analysis: same three-way distinction
   const state2Analysis = actor2.majorAttackChoice
     ? `${actor2.name} attacked: K=${K2} ≥ k*=${kStar2}`
     : actor2.minorConflictChoice > 0
       ? `${actor2.name} signaled (K=${K2}), but K < k*=${kStar2}`
-      : `${actor2.name} stayed quiet: K=${K2} < K̂=${signalingCutoff}`;
+      : actor2.privateCapability >= equilibrium.attackCutoffNoSignal
+        ? `${actor2.name} didn't signal: K=${K2} ≥ k*(0)=${kStarNoSignal}, attacking anyway`
+        : `${actor2.name} stayed quiet: K=${K2} < K̂=${signalingCutoff}`;
 
   const outcomeNotes: Record<RoundOutcomeType, string> = {
     peace: 'Neither state had sufficient capability to justify the risk of war.',

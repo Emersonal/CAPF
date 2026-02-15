@@ -1,5 +1,5 @@
 /**
- * CAPF - Competitive AI Policy Framework
+ * DSA Simulator - Decisive Strategic Advantage Signaling Model
  * Interactive visualization of the Patell DSA signaling model
  */
 
@@ -15,9 +15,9 @@ function App() {
       <header className="bg-gray-900 border-b border-gray-800 px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold">CAPF</h1>
+            <h1 className="text-xl font-bold">DSA Simulator</h1>
             <p className="text-sm text-gray-400">
-              Competitive AI Policy Framework
+              Decisive Strategic Advantage Signaling Model
             </p>
           </div>
           <p className="text-xs text-gray-500 max-w-md text-right">
