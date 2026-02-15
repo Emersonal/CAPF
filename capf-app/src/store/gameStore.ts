@@ -1,5 +1,5 @@
 /**
- * Zustand store for CAPF game state
+ * Zustand store for DSA Simulator game state
  * Manages parameters, simulation, and UI state
  */
 
@@ -24,6 +24,7 @@ interface GameStore extends GameState {
   ) => void;
   runRound: () => void;
   reset: () => void;
+  loadParameters: (params: ModelParameters) => void;
   togglePlay: () => void;
   setPlaying: (isPlaying: boolean) => void;
 }
@@ -74,6 +75,21 @@ export const useGameStore = create<GameStore>((set, get) => {
         actors: newState.actors,
         history: newState.history,
         equilibriumPrediction: newState.equilibriumPrediction,
+        isPlaying: false,
+      });
+    },
+
+    // Load a complete parameter set (for scenarios)
+    loadParameters: (params: ModelParameters) => {
+      const newEquilibrium = computeEquilibrium(params);
+      const newState = resetGame(params);
+      set({
+        parameters: params,
+        round: newState.round,
+        date: newState.date,
+        actors: newState.actors,
+        history: newState.history,
+        equilibriumPrediction: newEquilibrium,
         isPlaying: false,
       });
     },
