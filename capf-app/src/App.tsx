@@ -6,8 +6,9 @@
 import { useState } from 'react';
 import { AssumptionPanel } from './components/Controls';
 import { EquilibriumDisplay } from './components/GameTheory';
+import { WorldMap } from './components/Map';
 import { TurnControls } from './components/Timeline';
-import { OnboardingOverlay, ScenarioChips } from './components/Onboarding';
+import { OnboardingOverlay } from './components/Onboarding';
 import './App.css';
 
 function App() {
@@ -58,11 +59,9 @@ function App() {
           <AssumptionPanel />
         </aside>
 
-        {/* Center - Scenarios */}
-        <section className="flex-1 flex flex-col gap-4">
-          <div className="flex-1 bg-gray-900 rounded-lg border border-gray-700 p-4 overflow-y-auto">
-            <ScenarioChips />
-          </div>
+        {/* Center - Strategic Landscape Map */}
+        <section className="flex-1 flex flex-col gap-4 min-w-0">
+          <WorldMap />
         </section>
 
         {/* Right Sidebar - Equilibrium & Simulation */}
