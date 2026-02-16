@@ -60,12 +60,12 @@ function App() {
         </aside>
 
         {/* Center - Strategic Landscape Map */}
-        <section className="flex-1 flex flex-col gap-4 min-w-0">
+        <section className="flex-1 flex flex-col gap-4 min-w-0 min-h-0">
           <WorldMap />
         </section>
 
         {/* Right Sidebar - Equilibrium & Simulation */}
-        <aside className="w-96 flex-shrink-0 flex flex-col gap-4">
+        <aside className="w-96 flex-shrink-0 flex flex-col gap-4 overflow-hidden">
           <EquilibriumDisplay />
           <div className="flex-1 min-h-0">
             <TurnControls />

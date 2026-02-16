@@ -12,7 +12,6 @@ import {
 } from 'react-simple-maps';
 import { useActors, useHistory, useEquilibrium } from '../../store/gameStore';
 import { StateInfoPanel } from './StateInfoPanel';
-import { OutcomeOverlay } from './OutcomeOverlay';
 
 // Natural Earth TopoJSON URL (110m resolution for performance)
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json';
@@ -86,8 +85,19 @@ export function WorldMap() {
     return undefined;
   };
 
+  // Outcome styling config
+  const getOutcomeStyle = (outcomeType: string) => {
+    const styles: Record<string, { icon: string; label: string; color: string }> = {
+      peace: { icon: '✓', label: 'Peace', color: 'text-green-400' },
+      dsa_victory_1: { icon: '⚔', label: 'US Victory (DSA)', color: 'text-blue-400' },
+      dsa_victory_2: { icon: '⚔', label: 'China Victory (DSA)', color: 'text-orange-400' },
+      catastrophe: { icon: '💥', label: 'Catastrophe', color: 'text-red-400' },
+    };
+    return styles[outcomeType] || styles.peace;
+  };
+
   return (
-    <div className="relative h-full flex flex-col bg-gray-900 rounded-lg border border-gray-700 overflow-hidden">
+    <div className="relative flex flex-col bg-gray-900 rounded-lg border border-gray-700 overflow-hidden" style={{ height: 650 }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700 bg-gray-900/80 z-10">
         <h2 className="text-lg font-semibold text-white">Strategic Landscape</h2>
@@ -103,84 +113,99 @@ export function WorldMap() {
         </div>
       </div>
 
-      {/* Map Container */}
-      <div className="flex-1 relative" style={{ backgroundColor: COLORS.ocean }}>
-        <ComposableMap
-          projection="geoNaturalEarth1"
-          projectionConfig={{
-            scale: 160,
-            center: [20, 20],
-          }}
-          style={{
-            width: '100%',
-            height: '100%',
-          }}
-        >
-          <ZoomableGroup zoom={1} center={[20, 20]}>
-            <Geographies geography={GEO_URL}>
-              {({ geographies }) =>
-                geographies.map((geo) => {
-                  const geoId = geo.id;
-                  const isUSA = geoId === USA_ISO;
-                  const isChina = geoId === CHINA_ISO;
-                  const isHovered = hoveredCountry === geoId;
-                  const isClickable = isUSA || isChina;
+      {/* Map Container - outer wrapper centers the fixed-size map */}
+      <div className="flex-1 relative min-h-0 flex items-center justify-center" style={{ backgroundColor: COLORS.ocean }}>
+        {/* Fixed-size wrapper prevents repositioning on container resize */}
+        <div className="relative" style={{ width: 800, height: 500 }}>
+          <ComposableMap
+            projection="geoNaturalEarth1"
+            projectionConfig={{
+              scale: 160,
+              center: [20, 20],
+            }}
+            width={800}
+            height={500}
+          >
+            <ZoomableGroup zoom={1}>
+              <Geographies geography={GEO_URL}>
+                {({ geographies }) =>
+                  geographies.map((geo) => {
+                    const geoId = geo.id;
+                    const isUSA = geoId === USA_ISO;
+                    const isChina = geoId === CHINA_ISO;
+                    const isHovered = hoveredCountry === geoId;
+                    const isClickable = isUSA || isChina;
 
-                  return (
-                    <Geography
-                      key={geo.rsmKey}
-                      geography={geo}
-                      fill={getCountryColor(geoId, isHovered)}
-                      stroke={COLORS.border}
-                      strokeWidth={0.5}
-                      style={{
-                        default: {
-                          outline: 'none',
-                          transition: 'fill 0.2s ease',
-                        },
-                        hover: {
-                          outline: 'none',
-                          cursor: isClickable ? 'pointer' : 'default',
-                        },
-                        pressed: {
-                          outline: 'none',
-                        },
-                      }}
-                      onMouseEnter={() => setHoveredCountry(geoId)}
-                      onMouseLeave={() => setHoveredCountry(null)}
-                      onClick={() => handleCountryClick(geoId)}
-                    />
-                  );
-                })
-              }
-            </Geographies>
-          </ZoomableGroup>
-        </ComposableMap>
+                    return (
+                      <Geography
+                        key={geo.rsmKey}
+                        geography={geo}
+                        fill={getCountryColor(geoId, isHovered)}
+                        stroke={COLORS.border}
+                        strokeWidth={0.5}
+                        style={{
+                          default: {
+                            outline: 'none',
+                            transition: 'fill 0.2s ease',
+                          },
+                          hover: {
+                            outline: 'none',
+                            cursor: isClickable ? 'pointer' : 'default',
+                          },
+                          pressed: {
+                            outline: 'none',
+                          },
+                        }}
+                        onMouseEnter={() => setHoveredCountry(geoId)}
+                        onMouseLeave={() => setHoveredCountry(null)}
+                        onClick={() => handleCountryClick(geoId)}
+                      />
+                    );
+                  })
+                }
+              </Geographies>
+            </ZoomableGroup>
+          </ComposableMap>
 
-        {/* State Info Panel */}
-        {selectedCountry && (
-          <StateInfoPanel
-            actor={getSelectedActor()!}
-            equilibriumSignalingCutoff={equilibrium.signalingCutoff}
-            latestPayoff={getSelectedPayoff()}
-            isState1={selectedCountry === 'usa'}
-            onClose={() => setSelectedCountry(null)}
-          />
-        )}
+          {/* State Info Panel */}
+          {selectedCountry && (
+            <StateInfoPanel
+              actor={getSelectedActor()!}
+              equilibriumSignalingCutoff={equilibrium.signalingCutoff}
+              latestPayoff={getSelectedPayoff()}
+              isState1={selectedCountry === 'usa'}
+              onClose={() => setSelectedCountry(null)}
+            />
+          )}
 
-        {/* Outcome Overlay */}
-        {latestOutcome && !selectedCountry && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="pointer-events-auto">
-              <OutcomeOverlay outcome={latestOutcome} />
-            </div>
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* Footer: Capability comparison */}
+      {/* Footer: Outcome + Capability comparison */}
       {latestOutcome && (
         <div className="px-4 py-3 border-t border-gray-700 bg-gray-900/80">
+          {/* Outcome row */}
+          <div className="flex items-center justify-center gap-4 mb-2">
+            <span className={`font-semibold ${getOutcomeStyle(latestOutcome.outcome).color}`}>
+              {getOutcomeStyle(latestOutcome.outcome).icon} {getOutcomeStyle(latestOutcome.outcome).label}
+            </span>
+            <span className="text-xs text-gray-500">Round {latestOutcome.round}</span>
+            {latestOutcome.minorConflictOccurred && (
+              <span className="px-2 py-0.5 bg-yellow-500/20 border border-yellow-500/50 rounded text-xs text-yellow-400">
+                Signaling
+              </span>
+            )}
+            <span className="text-xs">
+              <span className={latestOutcome.payoffs[0] >= 0 ? 'text-green-400' : 'text-red-400'}>
+                US: {latestOutcome.payoffs[0] >= 0 ? '+' : ''}{latestOutcome.payoffs[0].toFixed(1)}
+              </span>
+              {' / '}
+              <span className={latestOutcome.payoffs[1] >= 0 ? 'text-green-400' : 'text-red-400'}>
+                CN: {latestOutcome.payoffs[1] >= 0 ? '+' : ''}{latestOutcome.payoffs[1].toFixed(1)}
+              </span>
+            </span>
+          </div>
+          {/* Capability comparison row */}
           <div className="flex items-center justify-center gap-8 text-sm">
             <div className="text-center">
               <div className="text-blue-400 font-mono">

@@ -1,18 +1,22 @@
 /**
  * TurnControls - Controls for running simulation rounds
- * Includes run button, auto-play toggle, and history log
+ * Includes step-by-step visualization, auto-play toggle, and history log
  */
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import {
   useRound,
   useHistory,
   useIsPlaying,
-  useRunRound,
   useTogglePlay,
   useReset,
+  useCurrentPhase,
+  usePendingOutcome,
+  useStartRound,
+  useAdvancePhase,
 } from '../../store/gameStore';
 import type { RoundOutcome } from '../../models/types';
+import { DatePhaseDisplay } from './DatePhaseDisplay';
 
 const OUTCOME_COLORS: Record<RoundOutcome['outcome'], string> = {
   peace: 'bg-green-500',
@@ -65,20 +69,38 @@ export function TurnControls() {
   const round = useRound();
   const history = useHistory();
   const isPlaying = useIsPlaying();
-  const runRound = useRunRound();
   const togglePlay = useTogglePlay();
   const reset = useReset();
+  const currentPhase = useCurrentPhase();
+  const pendingOutcome = usePendingOutcome();
+  const startRound = useStartRound();
+  const advancePhase = useAdvancePhase();
 
-  // Auto-play interval
+  const isInPhase = currentPhase !== 'idle';
+
+  // Handle next step in step-by-step mode
+  const handleNextStep = useCallback(() => {
+    if (currentPhase === 'idle') {
+      startRound();
+    } else {
+      advancePhase();
+    }
+  }, [currentPhase, startRound, advancePhase]);
+
+  // Auto-play interval - now steps through phases
   useEffect(() => {
     if (!isPlaying) return;
 
     const interval = setInterval(() => {
-      runRound();
-    }, 1500);
+      if (currentPhase === 'idle') {
+        startRound();
+      } else {
+        advancePhase();
+      }
+    }, 800); // Faster for auto-play
 
     return () => clearInterval(interval);
-  }, [isPlaying, runRound]);
+  }, [isPlaying, currentPhase, startRound, advancePhase]);
 
   // Calculate outcome statistics
   const stats = history.reduce(
@@ -96,13 +118,16 @@ export function TurnControls() {
         <span className="text-sm text-gray-400">Round {round}</span>
       </div>
 
+      {/* Phase display */}
+      <DatePhaseDisplay phase={currentPhase} pendingOutcome={pendingOutcome} />
+
       <div className="flex gap-2 mb-4">
         <button
-          onClick={runRound}
+          onClick={handleNextStep}
           disabled={isPlaying}
           className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded font-medium transition-colors"
         >
-          Run Round
+          {currentPhase === 'idle' ? 'Start Round' : currentPhase === 'outcome' ? 'Complete' : 'Next Step'}
         </button>
         <button
           onClick={togglePlay}
@@ -116,7 +141,8 @@ export function TurnControls() {
         </button>
         <button
           onClick={reset}
-          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded font-medium transition-colors"
+          disabled={isInPhase && !isPlaying}
+          className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-gray-200 rounded font-medium transition-colors"
         >
           Reset
         </button>

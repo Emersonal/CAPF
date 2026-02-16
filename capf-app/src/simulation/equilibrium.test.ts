@@ -122,19 +122,21 @@ describe('Equilibrium Computations', () => {
     it('should return k* = w + T + σ·Φ⁻¹(...) for no signal case', () => {
       const params = DEFAULT_PARAMETERS;
       const tau = computeTau(params.V, params.theta);
-      const kStar = computeAttackCutoff(params, 0, tau);
+      const opponentW = params.w2; // State 1 attacking, opponent is State 2
+      const kStar = computeAttackCutoff(params, 0, tau, opponentW);
 
-      // k* should be positive and greater than w
-      expect(kStar).toBeGreaterThan(params.w);
+      // k* should be positive and greater than opponent's w
+      expect(kStar).toBeGreaterThan(opponentW);
     });
 
     it('should increase with opponent signal (higher y_j = higher cutoff)', () => {
       const params = DEFAULT_PARAMETERS;
       const tau = computeTau(params.V, params.theta);
+      const opponentW = params.w2;
 
-      const kStar0 = computeAttackCutoff(params, 0, tau);
-      const kStar3 = computeAttackCutoff(params, 3, tau);
-      const kStar5 = computeAttackCutoff(params, 5, tau);
+      const kStar0 = computeAttackCutoff(params, 0, tau, opponentW);
+      const kStar3 = computeAttackCutoff(params, 3, tau, opponentW);
+      const kStar5 = computeAttackCutoff(params, 5, tau, opponentW);
 
       // Higher opponent signal should raise my attack threshold
       expect(kStar3).toBeGreaterThan(kStar0);
@@ -145,15 +147,29 @@ describe('Equilibrium Computations', () => {
       const params1 = { ...DEFAULT_PARAMETERS, T: 1 };
       const params2 = { ...DEFAULT_PARAMETERS, T: 2 };
       const params3 = { ...DEFAULT_PARAMETERS, T: 3 };
+      const opponentW = DEFAULT_PARAMETERS.w2;
 
       const tau = computeTau(DEFAULT_PARAMETERS.V, DEFAULT_PARAMETERS.theta);
 
-      expect(computeAttackCutoff(params2, 0, tau)).toBeGreaterThan(
-        computeAttackCutoff(params1, 0, tau)
+      expect(computeAttackCutoff(params2, 0, tau, opponentW)).toBeGreaterThan(
+        computeAttackCutoff(params1, 0, tau, opponentW)
       );
-      expect(computeAttackCutoff(params3, 0, tau)).toBeGreaterThan(
-        computeAttackCutoff(params2, 0, tau)
+      expect(computeAttackCutoff(params3, 0, tau, opponentW)).toBeGreaterThan(
+        computeAttackCutoff(params2, 0, tau, opponentW)
       );
+    });
+
+    it('should produce different cutoffs for asymmetric w1/w2', () => {
+      const asymmetricParams = { ...DEFAULT_PARAMETERS, w1: 3, w2: 7 };
+      const tau = computeTau(asymmetricParams.V, asymmetricParams.theta);
+
+      // State 1's cutoff uses opponent's w2=7
+      const kStar1 = computeAttackCutoff(asymmetricParams, 0, tau, asymmetricParams.w2);
+      // State 2's cutoff uses opponent's w1=3
+      const kStar2 = computeAttackCutoff(asymmetricParams, 0, tau, asymmetricParams.w1);
+
+      // State 1 faces stronger opponent (w2=7), so higher cutoff
+      expect(kStar1).toBeGreaterThan(kStar2);
     });
   });
 
@@ -167,7 +183,7 @@ describe('Equilibrium Computations', () => {
       expect(eq.attackProbability).toBeLessThanOrEqual(1);
       expect(eq.peaceProbability).toBeGreaterThanOrEqual(0);
       expect(eq.peaceProbability).toBeLessThanOrEqual(1);
-      expect(eq.attackCutoffNoSignal).toBeGreaterThan(DEFAULT_PARAMETERS.w);
+      expect(eq.attackCutoffNoSignal).toBeGreaterThan((DEFAULT_PARAMETERS.w1 + DEFAULT_PARAMETERS.w2) / 2);
     });
 
     it('should have signaling cutoff <= attack cutoff', () => {
@@ -190,6 +206,38 @@ describe('Equilibrium Computations', () => {
       // Higher θ → higher τ → higher attack cutoff
       expect(eq2.tau).toBeGreaterThan(eq1.tau);
       expect(eq2.attackCutoffNoSignal).toBeGreaterThan(eq1.attackCutoffNoSignal);
+    });
+
+    it('should have state-specific cutoffs for asymmetric capabilities', () => {
+      const asymmetricParams = { ...DEFAULT_PARAMETERS, w1: 3, w2: 8 };
+      const eq = computeEquilibrium(asymmetricParams);
+
+      // State 1 faces stronger opponent (w2=8), State 2 faces weaker (w1=3)
+      // So State 1's cutoff should be higher (harder to attack strong opponent)
+      expect(eq.attackCutoff1NoSignal).toBeGreaterThan(eq.attackCutoff2NoSignal);
+    });
+
+    it('should have near-zero catastrophe probability when one state dominates', () => {
+      // w_US=1, w_CN=10 with T=2: China almost always has DSA
+      const dominantParams = { ...DEFAULT_PARAMETERS, w1: 1, w2: 10, T: 2 };
+      const eq = computeEquilibrium(dominantParams);
+
+      // Gap is ~9, much larger than T=2, so neither-has-DSA is very rare
+      // Catastrophe should be very low
+      expect(eq.catastropheProbability).toBeLessThan(0.05);
+    });
+
+    it('should have high catastrophe probability when capabilities are close', () => {
+      // w1=w2=5 with T=2: gap is often within T, catastrophe more likely
+      const symmetricParams = { ...DEFAULT_PARAMETERS, w1: 5, w2: 5, T: 2 };
+      const eq = computeEquilibrium(symmetricParams);
+
+      // With symmetric capabilities, gaps are often < T, so catastrophe is meaningful
+      // Should be higher than the dominant case
+      const dominantParams = { ...DEFAULT_PARAMETERS, w1: 1, w2: 10, T: 2 };
+      const eqDominant = computeEquilibrium(dominantParams);
+
+      expect(eq.catastropheProbability).toBeGreaterThan(eqDominant.catastropheProbability);
     });
   });
 });

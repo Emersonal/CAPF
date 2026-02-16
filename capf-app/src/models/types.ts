@@ -5,10 +5,14 @@
 
 /**
  * Core model parameters (Section 4.1)
+ * Extended to support asymmetric capabilities (w1 != w2)
  */
 export interface ModelParameters {
-  /** Budget/base capability endowment (w_i = w_j = w for symmetric case) */
-  w: number;
+  /** US base capability endowment (w_1) */
+  w1: number;
+
+  /** China base capability endowment (w_2) */
+  w2: number;
 
   /** Uncertainty - std dev of capability draws (σ) */
   sigma: number;
@@ -30,7 +34,8 @@ export interface ModelParameters {
  * Default parameter values
  */
 export const DEFAULT_PARAMETERS: ModelParameters = {
-  w: 5,        // Baseline capability budget
+  w1: 5,       // US baseline capability budget
+  w2: 5,       // China baseline capability budget
   sigma: 1,    // Moderate uncertainty
   T: 2,        // Moderate DSA threshold
   c_m: 1,      // Moderate minor conflict cost
@@ -118,10 +123,22 @@ export interface EquilibriumPrediction {
   /** Probability of catastrophe (war without DSA) */
   catastropheProbability: number;
 
-  /** Attack cutoff when no signal observed: k*(0) */
+  /** State 1 (US) attack cutoff when no signal: k*₁(0) */
+  attackCutoff1NoSignal: number;
+
+  /** State 2 (China) attack cutoff when no signal: k*₂(0) */
+  attackCutoff2NoSignal: number;
+
+  /** State 1 (US) signaling cutoff K̂₁ */
+  signalingCutoff1: number;
+
+  /** State 2 (China) signaling cutoff K̂₂ */
+  signalingCutoff2: number;
+
+  /** @deprecated Use attackCutoff1NoSignal or attackCutoff2NoSignal */
   attackCutoffNoSignal: number;
 
-  /** Signaling cutoff K̂ */
+  /** @deprecated Use signalingCutoff1 or signalingCutoff2 */
   signalingCutoff: number;
 }
 
@@ -129,6 +146,11 @@ export interface EquilibriumPrediction {
  * Current date/stage in the game
  */
 export type GameDate = 1 | 2 | 3;
+
+/**
+ * Phase of the current round (for step-by-step visualization)
+ */
+export type RoundPhase = 'idle' | 'date1' | 'date2' | 'date3' | 'outcome';
 
 /**
  * Full game state
@@ -154,6 +176,12 @@ export interface GameState {
 
   /** Is the simulation running automatically? */
   isPlaying: boolean;
+
+  /** Current phase of step-by-step visualization */
+  currentPhase: RoundPhase;
+
+  /** Pending outcome during step-by-step animation */
+  pendingOutcome: RoundOutcome | null;
 }
 
 /**
@@ -236,13 +264,23 @@ export const PARAMETER_CONTROLS: ParameterControlConfig[] = [
     comparativeStatic: 'Higher c_m → less signaling, more direct attacks',
   },
   {
-    id: 'w',
-    label: 'Base Capability (w)',
-    description: 'Starting capability budget for both states',
+    id: 'w1',
+    label: 'US Base Capability (w_US)',
+    description: 'Starting capability budget for United States',
     min: 1,
     max: 10,
     step: 0.5,
     defaultValue: 5,
-    comparativeStatic: 'Higher w → more powerful starting position',
+    comparativeStatic: 'Higher w_US → US more likely to achieve DSA',
+  },
+  {
+    id: 'w2',
+    label: 'China Base Capability (w_CN)',
+    description: 'Starting capability budget for China',
+    min: 1,
+    max: 10,
+    step: 0.5,
+    defaultValue: 5,
+    comparativeStatic: 'Higher w_CN → China more likely to achieve DSA',
   },
 ];

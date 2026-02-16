@@ -50,12 +50,14 @@ export function createInitialGameState(
     date: 1,
     parameters: params,
     actors: [
-      createInitialActor('state1', 'United States', params.w),
-      createInitialActor('state2', 'China', params.w),
+      createInitialActor('state1', 'United States', params.w1),
+      createInitialActor('state2', 'China', params.w2),
     ],
     history: [],
     equilibriumPrediction: equilibrium,
     isPlaying: false,
+    currentPhase: 'idle',
+    pendingOutcome: null,
   };
 }
 
@@ -67,12 +69,19 @@ export function simulateDate1(
   state: GameState
 ): [ActorState, ActorState] {
   const { parameters } = state;
-  const { w, sigma } = parameters;
+  const { w1, w2, sigma } = parameters;
 
-  const actors = state.actors.map((actor) => ({
-    ...actor,
-    privateCapability: w + sampleNormal(0, sigma),
-  })) as [ActorState, ActorState];
+  // State 1 (US) uses w1, State 2 (China) uses w2
+  const actors: [ActorState, ActorState] = [
+    {
+      ...state.actors[0],
+      privateCapability: w1 + sampleNormal(0, sigma),
+    },
+    {
+      ...state.actors[1],
+      privateCapability: w2 + sampleNormal(0, sigma),
+    },
+  ];
 
   return actors;
 }
@@ -123,11 +132,14 @@ export function simulateDate3(
   equilibrium: EquilibriumPrediction
 ): [ActorState, ActorState] {
   const { parameters } = state;
+  const { w1, w2 } = parameters;
   const tau = equilibrium.tau;
 
   // Compute attack cutoffs based on opponent's revealed signal
-  const kStar1 = computeAttackCutoff(parameters, actors[1].revealedLowerBound, tau);
-  const kStar2 = computeAttackCutoff(parameters, actors[0].revealedLowerBound, tau);
+  // State 1's cutoff uses opponent State 2's w (w2)
+  const kStar1 = computeAttackCutoff(parameters, actors[1].revealedLowerBound, tau, w2);
+  // State 2's cutoff uses opponent State 1's w (w1)
+  const kStar2 = computeAttackCutoff(parameters, actors[0].revealedLowerBound, tau, w1);
 
   return [
     {

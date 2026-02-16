@@ -29,17 +29,24 @@ export function computeB(yj: number, w: number, sigma: number): number {
 
 /**
  * Compute the attack cutoff k*_i(y_j)
- * k*_i(y_j) = w + T + σ · Φ⁻¹(B_j + (1 - B_j)τ)
+ * k*_i(y_j) = w_j + T + σ · Φ⁻¹(B_j + (1 - B_j)τ)
  *
  * State i attacks iff K_i ≥ k*_i(y_j)
+ * Note: Uses opponent's w_j for B_j computation
+ *
+ * @param params - Model parameters
+ * @param yj - Opponent's signal (0 if no signal)
+ * @param tau - Attack threshold
+ * @param opponentW - Opponent's base capability (REQUIRED for correct asymmetric computation)
  */
 export function computeAttackCutoff(
   params: ModelParameters,
   yj: number,
-  tau: number
+  tau: number,
+  opponentW: number
 ): number {
-  const { w, sigma, T } = params;
-  const Bj = computeB(yj, w, sigma);
+  const { sigma, T } = params;
+  const Bj = computeB(yj, opponentW, sigma);
 
   // Argument to Φ⁻¹
   const arg = Bj + (1 - Bj) * tau;
@@ -48,7 +55,7 @@ export function computeAttackCutoff(
   if (arg <= 0) return -Infinity;
   if (arg >= 1) return Infinity;
 
-  return w + T + sigma * normalCDFInverse(arg);
+  return opponentW + T + sigma * normalCDFInverse(arg);
 }
 
 /**
@@ -57,14 +64,16 @@ export function computeAttackCutoff(
  */
 export function computeAttackProbabilityNoSignal(
   params: ModelParameters,
-  kStarNoSignal: number
+  kStarNoSignal: number,
+  stateW?: number
 ): number {
-  const { w, sigma } = params;
+  const { w1, w2, sigma } = params;
+  const w = stateW ?? (w1 + w2) / 2;
   return 1 - normalCDF((kStarNoSignal - w) / sigma);
 }
 
 /**
- * Compute the signaling cutoff K̂
+ * Compute a single state's signaling cutoff K̂
  *
  * This is found by solving: ΔA(K̂) · V/2 = L(K̂)
  * where:
@@ -78,49 +87,57 @@ export function computeAttackProbabilityNoSignal(
  * - Above k*(0): will attack anyway, don't need to signal
  *
  * We solve this numerically using bisection.
+ *
+ * @param params - Model parameters
+ * @param tau - Attack threshold
+ * @param ownKStarNoSignal - This state's attack cutoff with no signal
+ * @param ownW - This state's base capability
+ * @param opponentW - Opponent's base capability (for computing opponent's attack probability)
  */
-export function computeSignalingCutoff(
+export function computeSignalingCutoffForState(
   params: ModelParameters,
   tau: number,
-  kStarNoSignal: number
+  ownKStarNoSignal: number,
+  ownW: number,
+  opponentW: number
 ): number {
-  const { w, sigma, c_m, V } = params;
+  const { sigma, c_m, V } = params;
 
-  // A(y) = Pr(K_j ≥ k*(y)) - opponent's attack probability given signal y
+  // A(y) = Pr(K_opponent ≥ k*(y)) - opponent's attack probability given our signal y
+  // When we signal y, opponent's attack cutoff k*(y) uses OUR w (ownW) since we're their opponent
   const A = (y: number): number => {
-    const kStar = computeAttackCutoff(params, y, tau);
-    return 1 - normalCDF((kStar - w) / sigma);
+    const opponentKStar = computeAttackCutoff(params, y, tau, ownW);
+    return 1 - normalCDF((opponentKStar - opponentW) / sigma);
   };
 
   // ΔA(K) = A(0) - A(K) - reduction in opponent attack probability from signaling K
-  // As K increases, opponent's k*(K) increases, so A(K) decreases, so ΔA(K) increases
   const deltaA = (K: number): number => A(0) - A(K);
 
   // Expected cost of minor conflict when revealing K
   // L(K) ≈ c_m + E[K·K_j/(K + K_j)]
-  // Approximation: c_m + K·w/(K+w) which approaches c_m + w/2 for large K
-  const L = (K: number): number => c_m + (K * w) / (K + w + 0.01);
+  // Approximation: c_m + K·opponentW/(K+opponentW)
+  const L = (K: number): number => c_m + (K * opponentW) / (K + opponentW + 0.01);
 
   // Benefit: ΔA(K) · V/2 (deterrence value in catastrophic regime)
   const benefit = (K: number): number => deltaA(K) * V / 2;
 
   // Search bounds
   let lo = 0;
-  let hi = kStarNoSignal;
+  let hi = ownKStarNoSignal;
 
   // Check if signaling is ever beneficial
   // At K near k*(0), ΔA is maximized. If even then benefit < cost, no signaling region.
-  const testPoint = kStarNoSignal * 0.99; // Just below attack cutoff
+  const testPoint = ownKStarNoSignal * 0.99; // Just below attack cutoff
   if (benefit(testPoint) < L(testPoint)) {
-    return kStarNoSignal; // No signaling region
+    return ownKStarNoSignal; // No signaling region
   }
 
   // Check if signaling is beneficial even at very low K
   // If so, K̂ ≈ 0 (everyone signals)
-  if (benefit(w * 0.5) >= L(w * 0.5)) {
+  if (benefit(ownW * 0.5) >= L(ownW * 0.5)) {
     lo = 0;
   } else {
-    lo = w * 0.5;
+    lo = ownW * 0.5;
   }
 
   // Bisection to find K̂ where benefit(K̂) = L(K̂)
@@ -147,6 +164,20 @@ export function computeSignalingCutoff(
 }
 
 /**
+ * @deprecated Use computeSignalingCutoffForState for asymmetric case
+ * Legacy wrapper for backwards compatibility
+ */
+export function computeSignalingCutoff(
+  params: ModelParameters,
+  tau: number,
+  kStarNoSignal: number
+): number {
+  const { w1, w2 } = params;
+  const avgW = (w1 + w2) / 2;
+  return computeSignalingCutoffForState(params, tau, kStarNoSignal, avgW, avgW);
+}
+
+/**
  * Compute probability of catastrophe (war without DSA)
  * Catastrophe = at least one state attacks AND neither has DSA
  *
@@ -159,74 +190,121 @@ export function computeCatastropheProbability(
   params: ModelParameters,
   warProbability: number
 ): number {
-  const { sigma, T } = params;
+  const { w1, w2, sigma, T } = params;
 
   // Probability that neither has DSA: |K_1 - K_2| < T
-  // K_1 - K_2 ~ N(0, 2σ²) since K_i = w + ε_i with ε_i ~ N(0, σ²) i.i.d.
+  // K_1 - K_2 ~ N(w_1 - w_2, 2σ²) since K_i = w_i + ε_i with ε_i ~ N(0, σ²) i.i.d.
+  const meanDiff = w1 - w2;
   const combinedSigma = sigma * Math.sqrt(2);
 
-  // P(|K_1 - K_2| < T) = P(-T < K_1 - K_2 < T) = 2Φ(T/√2σ) - 1
-  const probNoDSA = 2 * normalCDF(T / combinedSigma) - 1;
+  // P(-T < K_1 - K_2 < T) = Φ((T - meanDiff)/σ√2) - Φ((-T - meanDiff)/σ√2)
+  const probNoDSA = normalCDF((T - meanDiff) / combinedSigma) -
+                    normalCDF((-T - meanDiff) / combinedSigma);
 
   // P(Catastrophe) ≈ P(War) × P(neither has DSA)
   return warProbability * probNoDSA;
 }
 
 /**
- * Compute probability of minor conflict
- * This is P(K̂ ≤ K < k*(0)) for each state
+ * Compute probability of minor conflict with state-specific cutoffs
+ * This is P(K̂ᵢ ≤ Kᵢ < k*ᵢ(0)) for each state
+ *
+ * @param params - Model parameters
+ * @param signalingCutoff1 - State 1's signaling cutoff K̂₁
+ * @param signalingCutoff2 - State 2's signaling cutoff K̂₂
+ * @param attackCutoff1 - State 1's attack cutoff k*₁(0)
+ * @param attackCutoff2 - State 2's attack cutoff k*₂(0)
+ */
+export function computeMinorConflictProbabilityAsymmetric(
+  params: ModelParameters,
+  signalingCutoff1: number,
+  signalingCutoff2: number,
+  attackCutoff1: number,
+  attackCutoff2: number
+): number {
+  const { w1, w2, sigma } = params;
+
+  // P(K̂₁ ≤ K₁ < k*₁(0)) for State 1
+  const probSignalRegion1 =
+    normalCDF((attackCutoff1 - w1) / sigma) -
+    normalCDF((signalingCutoff1 - w1) / sigma);
+
+  // P(K̂₂ ≤ K₂ < k*₂(0)) for State 2
+  const probSignalRegion2 =
+    normalCDF((attackCutoff2 - w2) / sigma) -
+    normalCDF((signalingCutoff2 - w2) / sigma);
+
+  // Probability at least one state is in signaling region
+  // P(at least one signals) = 1 - P(neither signals)
+  return 1 - (1 - Math.max(0, probSignalRegion1)) * (1 - Math.max(0, probSignalRegion2));
+}
+
+/**
+ * @deprecated Use computeMinorConflictProbabilityAsymmetric for asymmetric case
+ * Legacy wrapper for backwards compatibility
  */
 export function computeMinorConflictProbability(
   params: ModelParameters,
   signalingCutoff: number,
   kStarNoSignal: number
 ): number {
-  const { w, sigma } = params;
-
-  // P(K̂ ≤ K < k*(0))
-  const probSignalRegion =
-    normalCDF((kStarNoSignal - w) / sigma) -
-    normalCDF((signalingCutoff - w) / sigma);
-
-  // Probability at least one state is in signaling region
-  // P(at least one signals) = 1 - P(neither signals)
-  return 1 - Math.pow(1 - probSignalRegion, 2);
+  return computeMinorConflictProbabilityAsymmetric(
+    params,
+    signalingCutoff,
+    signalingCutoff,
+    kStarNoSignal,
+    kStarNoSignal
+  );
 }
 
 /**
  * Compute full equilibrium prediction from parameters
  */
 export function computeEquilibrium(params: ModelParameters): EquilibriumPrediction {
-  const { V, theta, w, sigma } = params;
+  const { V, theta, w1, w2, sigma } = params;
 
   // 1. Compute attack threshold τ = (V/2 + θ)/(V + θ)
   const tau = computeTau(V, theta);
 
-  // 2. Compute attack cutoff with no signal: k*(0)
-  const attackCutoffNoSignal = computeAttackCutoff(params, 0, tau);
+  // 2. Compute state-specific attack cutoffs with no signal
+  // State 1's cutoff k*₁(0) uses opponent's w2
+  const attackCutoff1NoSignal = computeAttackCutoff(params, 0, tau, w2);
+  // State 2's cutoff k*₂(0) uses opponent's w1
+  const attackCutoff2NoSignal = computeAttackCutoff(params, 0, tau, w1);
 
-  // 3. Compute signaling cutoff K̂
-  const signalingCutoff = computeSignalingCutoff(params, tau, attackCutoffNoSignal);
+  // 3. Compute state-specific signaling cutoffs
+  // State 1's K̂₁: own w is w1, opponent w is w2
+  const signalingCutoff1 = computeSignalingCutoffForState(params, tau, attackCutoff1NoSignal, w1, w2);
+  // State 2's K̂₂: own w is w2, opponent w is w1
+  const signalingCutoff2 = computeSignalingCutoffForState(params, tau, attackCutoff2NoSignal, w2, w1);
 
-  // 4. Compute probabilities
-  // P(one state doesn't attack) = Φ((k*(0) - w)/σ)
-  const oneStateNoAttackProb = normalCDF((attackCutoffNoSignal - w) / sigma);
+  // 4. Compute probabilities for each state using their own cutoffs
+  // P(state 1 doesn't attack) = Φ((k*₁(0) - w₁)/σ)
+  const state1NoAttackProb = normalCDF((attackCutoff1NoSignal - w1) / sigma);
+  // P(state 2 doesn't attack) = Φ((k*₂(0) - w₂)/σ)
+  const state2NoAttackProb = normalCDF((attackCutoff2NoSignal - w2) / sigma);
 
-  // P(Peace) = P(neither attacks) = [P(one doesn't attack)]² (symmetric, independent)
-  const peaceProbability = Math.pow(oneStateNoAttackProb, 2);
+  // P(Peace) = P(neither attacks) = P(state1 doesn't attack) × P(state2 doesn't attack)
+  const peaceProbability = state1NoAttackProb * state2NoAttackProb;
 
   // P(War) = P(at least one attacks) = 1 - P(Peace)
   const warProbability = 1 - peaceProbability;
 
-  // Minor conflict probability
-  const minorConflictProbability = computeMinorConflictProbability(
+  // Minor conflict probability with state-specific cutoffs
+  const minorConflictProbability = computeMinorConflictProbabilityAsymmetric(
     params,
-    signalingCutoff,
-    attackCutoffNoSignal
+    signalingCutoff1,
+    signalingCutoff2,
+    attackCutoff1NoSignal,
+    attackCutoff2NoSignal
   );
 
   // Catastrophe = war AND neither has DSA
   const catastropheProbability = computeCatastropheProbability(params, warProbability);
+
+  // Legacy values for backward compatibility (use averages)
+  const attackCutoffNoSignal = (attackCutoff1NoSignal + attackCutoff2NoSignal) / 2;
+  const signalingCutoff = (signalingCutoff1 + signalingCutoff2) / 2;
 
   return {
     tau,
@@ -234,6 +312,12 @@ export function computeEquilibrium(params: ModelParameters): EquilibriumPredicti
     minorConflictProbability,
     peaceProbability,
     catastropheProbability,
+    // State-specific values
+    attackCutoff1NoSignal,
+    attackCutoff2NoSignal,
+    signalingCutoff1,
+    signalingCutoff2,
+    // Legacy values (averages)
     attackCutoffNoSignal,
     signalingCutoff,
   };
@@ -265,8 +349,10 @@ export function explainParameterChange(
       `the value of information through signaling ${direction}.`,
     c_m: `Minor Conflict Cost ${direction}. Proxy wars are now ${newValue > oldValue ? 'more' : 'less'} expensive. ` +
       `States will ${newValue > oldValue ? 'skip signaling and attack directly more often' : 'engage in more proxy conflicts'}.`,
-    w: `Base Capability ${direction}. Both states start with ${direction} resources. ` +
-      `This shifts the baseline around which uncertainty operates.`,
+    w1: `US Base Capability ${direction}. US starts with ${direction} resources, ` +
+      `making US ${newValue > oldValue ? 'more' : 'less'} likely to achieve DSA.`,
+    w2: `China Base Capability ${direction}. China starts with ${direction} resources, ` +
+      `making China ${newValue > oldValue ? 'more' : 'less'} likely to achieve DSA.`,
   };
 
   return explanations[param];
