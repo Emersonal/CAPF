@@ -239,5 +239,37 @@ describe('Equilibrium Computations', () => {
 
       expect(eq.catastropheProbability).toBeGreaterThan(eqDominant.catastropheProbability);
     });
+
+    it('should handle asymmetric sigma correctly', () => {
+      // High US sigma, low China sigma
+      const asymSigmaParams = { ...DEFAULT_PARAMETERS, sigma1: 2, sigma2: 0.5 };
+      const eq = computeEquilibrium(asymSigmaParams);
+
+      // Basic validity checks
+      expect(eq.tau).toBeGreaterThan(0.5);
+      expect(eq.tau).toBeLessThan(1);
+      expect(eq.attackProbability).toBeGreaterThanOrEqual(0);
+      expect(eq.attackProbability).toBeLessThanOrEqual(1);
+
+      // State 1 (US) faces low-variance opponent (σ2=0.5)
+      // State 2 (China) faces high-variance opponent (σ1=2)
+      // Attack cutoff depends on opponent's sigma
+      // The cutoffs should be different
+      expect(eq.attackCutoff1NoSignal).not.toBeCloseTo(eq.attackCutoff2NoSignal, 1);
+    });
+
+    it('should use combined variance for catastrophe probability with asymmetric sigma', () => {
+      // σ1=2, σ2=1: combined variance is sqrt(4+1) = sqrt(5) ≈ 2.24
+      const asymParams = { ...DEFAULT_PARAMETERS, sigma1: 2, sigma2: 1 };
+      const eq = computeEquilibrium(asymParams);
+
+      // Compare to symmetric sigma with same combined variance
+      const symParams = { ...DEFAULT_PARAMETERS, sigma1: 1.58, sigma2: 1.58 }; // sqrt(5)/sqrt(2) ≈ 1.58
+      const eqSym = computeEquilibrium(symParams);
+
+      // Catastrophe probabilities should be similar (same combined variance)
+      // Allow 10% difference due to other formula differences
+      expect(Math.abs(eq.catastropheProbability - eqSym.catastropheProbability)).toBeLessThan(0.1);
+    });
   });
 });

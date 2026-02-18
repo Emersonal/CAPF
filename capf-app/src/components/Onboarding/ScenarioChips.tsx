@@ -28,7 +28,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-green-300',
     bgColor: 'bg-green-900/20',
     borderColor: 'border-green-800/50',
-    params: { w1: 5, w2: 5, sigma: 1, T: 3.5, c_m: 1, V: 40, theta: 180 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 3.5, c_m: 1, V: 40, theta: 180 },
   },
   {
     id: 'preemptive-strike',
@@ -41,7 +41,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-red-300',
     bgColor: 'bg-red-900/20',
     borderColor: 'border-red-800/50',
-    params: { w1: 5, w2: 5, sigma: 1.5, T: 0.5, c_m: 1, V: 100, theta: 20 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1.5, sigma2: 1.5, sigmaLinked: true, T: 0.5, c_m: 1, V: 100, theta: 20 },
   },
   {
     id: 'rand-nightmare',
@@ -53,7 +53,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-orange-300',
     bgColor: 'bg-orange-900/20',
     borderColor: 'border-orange-800/50',
-    params: { w1: 5, w2: 5, sigma: 1.5, T: 2, c_m: 4.5, V: 70, theta: 80 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1.5, sigma2: 1.5, sigmaLinked: true, T: 2, c_m: 4.5, V: 70, theta: 80 },
   },
   {
     id: 'cheap-talk',
@@ -66,7 +66,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-cyan-300',
     bgColor: 'bg-cyan-900/20',
     borderColor: 'border-cyan-800/50',
-    params: { w1: 5, w2: 5, sigma: 1, T: 2, c_m: 0.1, V: 50, theta: 100 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 2, c_m: 0.1, V: 50, theta: 100 },
   },
   {
     id: 'high-stakes',
@@ -78,7 +78,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-purple-300',
     bgColor: 'bg-purple-900/20',
     borderColor: 'border-purple-800/50',
-    params: { w1: 5, w2: 5, sigma: 1, T: 2, c_m: 1, V: 100, theta: 100 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 2, c_m: 1, V: 100, theta: 100 },
   },
   {
     id: 'fog-of-war',
@@ -90,7 +90,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-gray-300',
     bgColor: 'bg-gray-800/50',
     borderColor: 'border-gray-600/50',
-    params: { w1: 5, w2: 5, sigma: 3, T: 2, c_m: 1, V: 50, theta: 100 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 3, sigma2: 3, sigmaLinked: true, T: 2, c_m: 1, V: 50, theta: 100 },
   },
 ];
 
@@ -104,9 +104,15 @@ export function ScenarioChips() {
 
   // Detect which scenario is active (if any)
   const activeScenario = SCENARIOS.find((s) =>
-    Object.entries(s.params).every(
-      ([key, value]) => Math.abs(currentParams[key as keyof ModelParameters] - (value as number)) < 0.01
-    )
+    Object.entries(s.params).every(([key, value]) => {
+      const currentValue = currentParams[key as keyof ModelParameters];
+      // Handle boolean fields (wLinked, sigmaLinked)
+      if (typeof value === 'boolean') {
+        return currentValue === value;
+      }
+      // Handle numeric fields
+      return Math.abs((currentValue as number) - (value as number)) < 0.01;
+    })
   );
 
   return (

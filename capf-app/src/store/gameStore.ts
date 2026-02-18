@@ -45,9 +45,29 @@ export const useGameStore = create<GameStore>((set, get) => {
     ...initialState,
 
     // Update a single parameter and recompute equilibrium
+    // Handles linked parameters: when w or sigma is linked, updates both values together
     updateParameter: (param, value) => {
       set((state) => {
         const newParams = { ...state.parameters, [param]: value };
+
+        // Handle linked parameters - update the paired value when linked
+        if (param === 'w1' && newParams.wLinked) {
+          newParams.w2 = value as number;
+        } else if (param === 'w2' && newParams.wLinked) {
+          newParams.w1 = value as number;
+        } else if (param === 'sigma1' && newParams.sigmaLinked) {
+          newParams.sigma2 = value as number;
+        } else if (param === 'sigma2' && newParams.sigmaLinked) {
+          newParams.sigma1 = value as number;
+        }
+
+        // When linking params, sync the values
+        if (param === 'wLinked' && value === true) {
+          newParams.w2 = newParams.w1;
+        } else if (param === 'sigmaLinked' && value === true) {
+          newParams.sigma2 = newParams.sigma1;
+        }
+
         const newEquilibrium = computeEquilibrium(newParams);
 
         return {

@@ -63,23 +63,25 @@ export function createInitialGameState(
 
 /**
  * Simulate Date 1: Nature draws capabilities
- * K_i = w_i + ε_i, where ε_i ~ N(0, σ²)
+ * K_i = w_i + ε_i, where ε_i ~ N(0, σᵢ²)
+ *
+ * With asymmetric sigma, each state draws from its own distribution.
  */
 export function simulateDate1(
   state: GameState
 ): [ActorState, ActorState] {
   const { parameters } = state;
-  const { w1, w2, sigma } = parameters;
+  const { w1, w2, sigma1, sigma2 } = parameters;
 
-  // State 1 (US) uses w1, State 2 (China) uses w2
+  // State 1 (US) uses w1 and σ1, State 2 (China) uses w2 and σ2
   const actors: [ActorState, ActorState] = [
     {
       ...state.actors[0],
-      privateCapability: w1 + sampleNormal(0, sigma),
+      privateCapability: w1 + sampleNormal(0, sigma1),
     },
     {
       ...state.actors[1],
-      privateCapability: w2 + sampleNormal(0, sigma),
+      privateCapability: w2 + sampleNormal(0, sigma2),
     },
   ];
 
@@ -100,13 +102,17 @@ export function simulateDate2(
   actors: [ActorState, ActorState],
   equilibrium: EquilibriumPrediction
 ): [ActorState, ActorState] {
-  const { signalingCutoff, attackCutoffNoSignal } = equilibrium;
+  // Use state-specific cutoffs
+  const signalingCutoffs = [equilibrium.signalingCutoff1, equilibrium.signalingCutoff2];
+  const attackCutoffs = [equilibrium.attackCutoff1NoSignal, equilibrium.attackCutoff2NoSignal];
 
-  return actors.map((actor) => {
+  return actors.map((actor, index) => {
     const K = actor.privateCapability;
+    const signalingCutoff = signalingCutoffs[index];
+    const attackCutoff = attackCutoffs[index];
 
     // Determine if this actor should signal
-    const shouldSignal = K >= signalingCutoff && K < attackCutoffNoSignal;
+    const shouldSignal = K >= signalingCutoff && K < attackCutoff;
 
     const minorConflictChoice = shouldSignal ? K : 0;
     const revealedLowerBound = minorConflictChoice; // Signal reveals K as lower bound
@@ -125,6 +131,8 @@ export function simulateDate2(
  *
  * Equilibrium strategy:
  * Z_i = 1 iff K_i ≥ k*_i(y_j)
+ *
+ * With asymmetric sigma, each state's cutoff uses opponent's w and σ.
  */
 export function simulateDate3(
   state: GameState,
@@ -132,14 +140,14 @@ export function simulateDate3(
   equilibrium: EquilibriumPrediction
 ): [ActorState, ActorState] {
   const { parameters } = state;
-  const { w1, w2 } = parameters;
+  const { w1, w2, sigma1, sigma2 } = parameters;
   const tau = equilibrium.tau;
 
   // Compute attack cutoffs based on opponent's revealed signal
-  // State 1's cutoff uses opponent State 2's w (w2)
-  const kStar1 = computeAttackCutoff(parameters, actors[1].revealedLowerBound, tau, w2);
-  // State 2's cutoff uses opponent State 1's w (w1)
-  const kStar2 = computeAttackCutoff(parameters, actors[0].revealedLowerBound, tau, w1);
+  // State 1's cutoff uses opponent State 2's w (w2) and σ (σ2)
+  const kStar1 = computeAttackCutoff(parameters, actors[1].revealedLowerBound, tau, w2, sigma2);
+  // State 2's cutoff uses opponent State 1's w (w1) and σ (σ1)
+  const kStar2 = computeAttackCutoff(parameters, actors[0].revealedLowerBound, tau, w1, sigma1);
 
   return [
     {

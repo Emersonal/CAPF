@@ -5,7 +5,7 @@
 
 /**
  * Core model parameters (Section 4.1)
- * Extended to support asymmetric capabilities (w1 != w2)
+ * Extended to support asymmetric capabilities (w1 != w2) and noise (sigma1 != sigma2)
  */
 export interface ModelParameters {
   /** US base capability endowment (w_1) */
@@ -14,8 +14,17 @@ export interface ModelParameters {
   /** China base capability endowment (w_2) */
   w2: number;
 
-  /** Uncertainty - std dev of capability draws (σ) */
-  sigma: number;
+  /** Whether w1 and w2 are linked (symmetric) in the UI */
+  wLinked: boolean;
+
+  /** US R&D noise std dev (σ_1) */
+  sigma1: number;
+
+  /** China R&D noise std dev (σ_2) */
+  sigma2: number;
+
+  /** Whether sigma1 and sigma2 are linked (symmetric) in the UI */
+  sigmaLinked: boolean;
 
   /** DSA threshold - capability gap needed for decisive advantage (T) */
   T: number;
@@ -34,13 +43,16 @@ export interface ModelParameters {
  * Default parameter values
  */
 export const DEFAULT_PARAMETERS: ModelParameters = {
-  w1: 5,       // US baseline capability budget
-  w2: 5,       // China baseline capability budget
-  sigma: 1,    // Moderate uncertainty
-  T: 2,        // Moderate DSA threshold
-  c_m: 1,      // Moderate minor conflict cost
-  V: 50,       // Prize value
-  theta: 100,  // High catastrophe cost
+  w1: 5,            // US baseline capability budget
+  w2: 5,            // China baseline capability budget
+  wLinked: true,    // Start with symmetric w
+  sigma1: 1,        // US R&D noise
+  sigma2: 1,        // China R&D noise
+  sigmaLinked: true, // Start with symmetric sigma
+  T: 2,             // Moderate DSA threshold
+  c_m: 1,           // Moderate minor conflict cost
+  V: 50,            // Prize value
+  theta: 100,       // High catastrophe cost
 };
 
 /**
@@ -196,7 +208,7 @@ export interface ComparativeStaticResult {
 }
 
 /**
- * Parameter control metadata for UI
+ * Parameter control metadata for UI (global parameters)
  */
 export interface ParameterControlConfig {
   id: keyof ModelParameters;
@@ -210,7 +222,26 @@ export interface ParameterControlConfig {
 }
 
 /**
- * Parameter control configurations
+ * Splittable parameter config for state-specific parameters
+ */
+export interface SplittableParameterConfig {
+  label: string;
+  description: string;
+  linkedLabel: string;        // e.g., "w"
+  state1Label: string;        // e.g., "w_US"
+  state2Label: string;        // e.g., "w_CN"
+  id1: keyof ModelParameters; // e.g., 'w1'
+  id2: keyof ModelParameters; // e.g., 'w2'
+  linkedId: keyof ModelParameters; // e.g., 'wLinked'
+  min: number;
+  max: number;
+  step: number;
+  defaultValue: number;
+  comparativeStatic: string;
+}
+
+/**
+ * Global parameter control configurations (non-splittable)
  */
 export const PARAMETER_CONTROLS: ParameterControlConfig[] = [
   {
@@ -244,16 +275,6 @@ export const PARAMETER_CONTROLS: ParameterControlConfig[] = [
     comparativeStatic: 'Higher θ → stronger deterrence, more signaling',
   },
   {
-    id: 'sigma',
-    label: 'Uncertainty (σ)',
-    description: 'Variance in capability outcomes',
-    min: 0.1,
-    max: 3,
-    step: 0.1,
-    defaultValue: 1,
-    comparativeStatic: 'Higher σ → less predictable outcomes',
-  },
-  {
     id: 'c_m',
     label: 'Minor Conflict Cost (c_m)',
     description: 'Cost of engaging in proxy conflicts',
@@ -263,24 +284,40 @@ export const PARAMETER_CONTROLS: ParameterControlConfig[] = [
     defaultValue: 1,
     comparativeStatic: 'Higher c_m → less signaling, more direct attacks',
   },
+];
+
+/**
+ * Splittable parameter configurations (state-specific)
+ */
+export const SPLITTABLE_PARAMETERS: SplittableParameterConfig[] = [
   {
-    id: 'w1',
-    label: 'US Base Capability (w_US)',
-    description: 'Starting capability budget for United States',
+    label: 'Base Capability (w)',
+    description: 'Starting capability budget',
+    linkedLabel: 'w',
+    state1Label: 'w_US',
+    state2Label: 'w_CN',
+    id1: 'w1',
+    id2: 'w2',
+    linkedId: 'wLinked',
     min: 1,
     max: 10,
     step: 0.5,
     defaultValue: 5,
-    comparativeStatic: 'Higher w_US → US more likely to achieve DSA',
+    comparativeStatic: 'Higher w → state more likely to achieve DSA',
   },
   {
-    id: 'w2',
-    label: 'China Base Capability (w_CN)',
-    description: 'Starting capability budget for China',
-    min: 1,
-    max: 10,
-    step: 0.5,
-    defaultValue: 5,
-    comparativeStatic: 'Higher w_CN → China more likely to achieve DSA',
+    label: 'R&D Uncertainty (σ)',
+    description: 'Variance in capability outcomes',
+    linkedLabel: 'σ',
+    state1Label: 'σ_US',
+    state2Label: 'σ_CN',
+    id1: 'sigma1',
+    id2: 'sigma2',
+    linkedId: 'sigmaLinked',
+    min: 0.1,
+    max: 3,
+    step: 0.1,
+    defaultValue: 1,
+    comparativeStatic: 'Higher σ → more variable outcomes',
   },
 ];
