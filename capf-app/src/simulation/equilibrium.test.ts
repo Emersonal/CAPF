@@ -258,6 +258,25 @@ describe('Equilibrium Computations', () => {
       expect(eq.attackCutoff1NoSignal).not.toBeCloseTo(eq.attackCutoff2NoSignal, 1);
     });
 
+    it('should have DSA₁ + DSA₂ + catastrophe = P(war)', () => {
+      // Default symmetric params
+      const eq = computeEquilibrium(DEFAULT_PARAMETERS);
+      const sum = eq.dsaVictory1Probability + eq.dsaVictory2Probability + eq.catastropheProbability;
+      expect(sum).toBeCloseTo(eq.attackProbability, 10);
+
+      // Asymmetric capabilities
+      const asymParams = { ...DEFAULT_PARAMETERS, w1: 3, w2: 7 };
+      const eqAsym = computeEquilibrium(asymParams);
+      const sumAsym = eqAsym.dsaVictory1Probability + eqAsym.dsaVictory2Probability + eqAsym.catastropheProbability;
+      expect(sumAsym).toBeCloseTo(eqAsym.attackProbability, 10);
+
+      // Asymmetric sigma
+      const asymSigParams = { ...DEFAULT_PARAMETERS, sigma1: 2, sigma2: 0.5 };
+      const eqAsymSig = computeEquilibrium(asymSigParams);
+      const sumAsymSig = eqAsymSig.dsaVictory1Probability + eqAsymSig.dsaVictory2Probability + eqAsymSig.catastropheProbability;
+      expect(sumAsymSig).toBeCloseTo(eqAsymSig.attackProbability, 10);
+    });
+
     it('should use combined variance for catastrophe probability with asymmetric sigma', () => {
       // σ1=2, σ2=1: combined variance is sqrt(4+1) = sqrt(5) ≈ 2.24
       const asymParams = { ...DEFAULT_PARAMETERS, sigma1: 2, sigma2: 1 };

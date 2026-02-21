@@ -1,9 +1,12 @@
 /**
  * DatePhaseDisplay - Shows the current phase of step-by-step round visualization
- * Displays Date 1 (capability draw), Date 2 (signaling), Date 3 (attack decisions), Outcome
+ * Displays Date 0 (investment), Date 1 (capability draw), Date 2 (signaling),
+ * Date 3 (attack decisions), Outcome
  */
 
 import type { RoundPhase, RoundOutcome } from '../../models/types';
+import { useParameters } from '../../store/gameStore';
+import { investmentToW, investmentToSigma } from '../../simulation/investment';
 
 interface DatePhaseDisplayProps {
   phase: RoundPhase;
@@ -15,6 +18,11 @@ const PHASE_INFO: Record<RoundPhase, { title: string; description: string; color
     title: 'Ready',
     description: 'Click "Start Round" to begin',
     color: 'text-gray-400',
+  },
+  date0: {
+    title: 'Date 0: Investment',
+    description: 'States allocate R&D budgets, determining capabilities and uncertainty',
+    color: 'text-emerald-400',
   },
   date1: {
     title: 'Date 1: Capability Draw',
@@ -39,19 +47,35 @@ const PHASE_INFO: Record<RoundPhase, { title: string; description: string; color
 };
 
 export function DatePhaseDisplay({ phase, pendingOutcome }: DatePhaseDisplayProps) {
+  const params = useParameters();
   const info = PHASE_INFO[phase];
+  const investmentMode = params.investmentMode;
 
   if (phase === 'idle') {
     return null;
   }
 
+  // Build phase dots list based on investment mode
+  const phases: RoundPhase[] = investmentMode
+    ? ['date0', 'date1', 'date2', 'date3', 'outcome']
+    : ['date1', 'date2', 'date3', 'outcome'];
+
+  const phaseLabels: Record<RoundPhase, string> = {
+    idle: '',
+    date0: 'Invest',
+    date1: 'Draw',
+    date2: 'Signal',
+    date3: 'Attack',
+    outcome: 'Result',
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg p-4 mb-4 border border-gray-700">
       {/* Phase indicator dots */}
       <div className="flex justify-between mb-3">
-        {(['date1', 'date2', 'date3', 'outcome'] as RoundPhase[]).map((p, i) => {
+        {phases.map((p, i) => {
           const isActive = phase === p;
-          const isPast = ['date1', 'date2', 'date3', 'outcome'].indexOf(phase) > i;
+          const isPast = phases.indexOf(phase) > i;
           return (
             <div key={p} className="flex flex-col items-center flex-1">
               <div
@@ -64,7 +88,7 @@ export function DatePhaseDisplay({ phase, pendingOutcome }: DatePhaseDisplayProp
                 }`}
               />
               <span className={`text-[10px] mt-1 ${isActive ? 'text-white font-medium' : 'text-gray-500'}`}>
-                {p === 'date1' ? 'Draw' : p === 'date2' ? 'Signal' : p === 'date3' ? 'Attack' : 'Result'}
+                {phaseLabels[p]}
               </span>
             </div>
           );
@@ -78,6 +102,27 @@ export function DatePhaseDisplay({ phase, pendingOutcome }: DatePhaseDisplayProp
       </div>
 
       {/* Phase-specific details */}
+      {phase === 'date0' && (
+        <div className="mt-4 pt-3 border-t border-gray-700">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="text-center">
+              <div className="text-blue-400 font-medium">US Investment</div>
+              <div className="text-2xl font-bold text-white">{params.I1}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                w = {investmentToW(params.I1).toFixed(2)}, σ = {investmentToSigma(params.I1).toFixed(2)}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-orange-400 font-medium">China Investment</div>
+              <div className="text-2xl font-bold text-white">{params.I2}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                w = {investmentToW(params.I2).toFixed(2)}, σ = {investmentToSigma(params.I2).toFixed(2)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pendingOutcome && (
         <div className="mt-4 pt-3 border-t border-gray-700">
           {phase === 'date1' && (

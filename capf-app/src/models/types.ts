@@ -37,6 +37,27 @@ export interface ModelParameters {
 
   /** Catastrophe cost - cost if war without DSA (θ) */
   theta: number;
+
+  /** Whether investment mode is enabled (w/σ derived from investment) */
+  investmentMode: boolean;
+
+  /** State 1 (US) investment level (1-100) */
+  I1: number;
+
+  /** State 2 (China) investment level (1-100) */
+  I2: number;
+
+  /** Whether I1 and I2 are linked (symmetric) in the UI */
+  investmentLinked: boolean;
+
+  /** State 1 (US) wealth endowment (W_1) */
+  W1: number;
+
+  /** State 2 (China) wealth endowment (W_2) */
+  W2: number;
+
+  /** Whether W1 and W2 are linked (symmetric) in the UI */
+  wealthLinked: boolean;
 }
 
 /**
@@ -53,6 +74,13 @@ export const DEFAULT_PARAMETERS: ModelParameters = {
   c_m: 1,           // Moderate minor conflict cost
   V: 50,            // Prize value
   theta: 100,       // High catastrophe cost
+  investmentMode: false, // Manual w/σ by default
+  I1: 10,           // US investment level
+  I2: 10,           // China investment level
+  investmentLinked: true, // Start symmetric
+  W1: 50,           // US wealth endowment (default = V)
+  W2: 50,           // China wealth endowment (default = V)
+  wealthLinked: true, // Start with symmetric wealth
 };
 
 /**
@@ -152,6 +180,18 @@ export interface EquilibriumPrediction {
 
   /** @deprecated Use signalingCutoff1 or signalingCutoff2 */
   signalingCutoff: number;
+
+  /** Probability that State 1 achieves DSA and war occurs */
+  dsaVictory1Probability: number;
+
+  /** Probability that State 2 achieves DSA and war occurs */
+  dsaVictory2Probability: number;
+
+  /** Expected payoff for State 1 (includes investment cost if applicable) */
+  expectedPayoff1: number;
+
+  /** Expected payoff for State 2 (includes investment cost if applicable) */
+  expectedPayoff2: number;
 }
 
 /**
@@ -162,7 +202,7 @@ export type GameDate = 1 | 2 | 3;
 /**
  * Phase of the current round (for step-by-step visualization)
  */
-export type RoundPhase = 'idle' | 'date1' | 'date2' | 'date3' | 'outcome';
+export type RoundPhase = 'idle' | 'date0' | 'date1' | 'date2' | 'date3' | 'outcome';
 
 /**
  * Full game state
@@ -194,6 +234,22 @@ export interface GameState {
 
   /** Pending outcome during step-by-step animation */
   pendingOutcome: RoundOutcome | null;
+}
+
+/**
+ * Result of GTO investment solver
+ */
+export interface InvestmentResult {
+  I1: number;
+  I2: number;
+  w1: number;
+  w2: number;
+  sigma1: number;
+  sigma2: number;
+  eu1: number;
+  eu2: number;
+  converged: boolean;
+  iterations: number;
 }
 
 /**
@@ -243,6 +299,35 @@ export interface SplittableParameterConfig {
 /**
  * Global parameter control configurations (non-splittable)
  */
+/**
+ * Investment parameter control configuration
+ */
+export interface InvestmentParameterConfig {
+  label: string;
+  description: string;
+  linkedLabel: string;
+  state1Label: string;
+  state2Label: string;
+  min: number;
+  max: number;
+  step: number;
+  defaultValue: number;
+  comparativeStatic: string;
+}
+
+export const INVESTMENT_PARAMETER: InvestmentParameterConfig = {
+  label: 'R&D Investment (I)',
+  description: 'Investment in AI R&D capabilities',
+  linkedLabel: 'I',
+  state1Label: 'I_US',
+  state2Label: 'I_CN',
+  min: 1,
+  max: 100,
+  step: 1,
+  defaultValue: 10,
+  comparativeStatic: 'Higher I → higher w and σ (diminishing returns)',
+};
+
 export const PARAMETER_CONTROLS: ParameterControlConfig[] = [
   {
     id: 'T',
@@ -259,8 +344,8 @@ export const PARAMETER_CONTROLS: ParameterControlConfig[] = [
     label: 'Prize Value (V)',
     description: 'Value of controlling the future',
     min: 10,
-    max: 100,
-    step: 5,
+    max: 1000,
+    step: 10,
     defaultValue: 50,
     comparativeStatic: 'Higher V → more aggressive behavior',
   },
@@ -279,8 +364,8 @@ export const PARAMETER_CONTROLS: ParameterControlConfig[] = [
     label: 'Minor Conflict Cost (c_m)',
     description: 'Cost of engaging in proxy conflicts',
     min: 0.1,
-    max: 5,
-    step: 0.1,
+    max: 20,
+    step: 0.5,
     defaultValue: 1,
     comparativeStatic: 'Higher c_m → less signaling, more direct attacks',
   },
@@ -321,3 +406,22 @@ export const SPLITTABLE_PARAMETERS: SplittableParameterConfig[] = [
     comparativeStatic: 'Higher σ → more variable outcomes',
   },
 ];
+
+/**
+ * Wealth endowment parameter config (always visible, not gated by investment mode)
+ */
+export const WEALTH_PARAMETER: SplittableParameterConfig = {
+  label: 'Wealth Endowment (W)',
+  description: 'Starting wealth/GDP of each state',
+  linkedLabel: 'W',
+  state1Label: 'W_US',
+  state2Label: 'W_CN',
+  id1: 'W1',
+  id2: 'W2',
+  linkedId: 'wealthLinked',
+  min: 10,
+  max: 200,
+  step: 5,
+  defaultValue: 50,
+  comparativeStatic: 'Higher W → more to lose, shifts risk calculus',
+};

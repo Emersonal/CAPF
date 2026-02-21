@@ -122,3 +122,41 @@ export function sampleNormal(mean: number, stdDev: number): number {
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
+
+/**
+ * 15-point Gauss-Legendre quadrature nodes and weights on [-1, 1].
+ * Exact for polynomials up to degree 29.
+ */
+const GL15_NODES: readonly number[] = [
+  -0.9879925180204854, -0.9372733924007060, -0.8482065834104272,
+  -0.7244177313601700, -0.5709721726085388, -0.3941513470775634,
+  -0.2011940939974345,  0.0000000000000000,  0.2011940939974345,
+   0.3941513470775634,  0.5709721726085388,  0.7244177313601700,
+   0.8482065834104272,  0.9372733924007060,  0.9879925180204854,
+];
+
+const GL15_WEIGHTS: readonly number[] = [
+  0.0307532419961173, 0.0703660474881081, 0.1071592204671719,
+  0.1395706779261543, 0.1662692058169939, 0.1861610000155622,
+  0.1984314853271116, 0.2025782419255613, 0.1984314853271116,
+  0.1861610000155622, 0.1662692058169939, 0.1395706779261543,
+  0.1071592204671719, 0.0703660474881081, 0.0307532419961173,
+];
+
+/**
+ * Numerical integration via 15-point Gauss-Legendre quadrature.
+ * Maps [a, b] → [-1, 1] and computes the weighted sum.
+ *
+ * Accurate for smooth integrands; exact for polynomials up to degree 29.
+ */
+export function integrate(f: (x: number) => number, a: number, b: number): number {
+  const halfWidth = (b - a) / 2;
+  const midpoint = (a + b) / 2;
+
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    sum += GL15_WEIGHTS[i] * f(midpoint + halfWidth * GL15_NODES[i]);
+  }
+
+  return halfWidth * sum;
+}

@@ -3,7 +3,8 @@
  * Implements Section 4.2 of "On Decisive Strategic Advantage"
  */
 
-import { normalCDF, normalCDFInverse } from './math';
+import { normalCDF, normalCDFInverse, normalPDF, integrate } from './math';
+import { resolveParams } from './investment';
 import type { ModelParameters, EquilibriumPrediction } from '../models/types';
 
 /**
@@ -131,9 +132,17 @@ export function computeSignalingCutoffForState(
   const deltaA = (K: number): number => A(0) - A(K);
 
   // Expected cost of minor conflict when revealing K
-  // L(K) ≈ c_m + E[K·K_j/(K + K_j)]
-  // Approximation: c_m + K·opponentW/(K+opponentW)
-  const L = (K: number): number => c_m + (K * opponentW) / (K + opponentW + 0.01);
+  // L(K) = c_m + E[K·K_j/(K + K_j)] where K_j ~ N(opponentW, σ_opp²)
+  const L = (K: number): number => {
+    const lo = Math.max(0.01, opponentW - 5 * sigmaOpp);
+    const hi = opponentW + 5 * sigmaOpp;
+    const contestExpected = integrate((x: number) => {
+      const contest = K * x / (K + x + 1e-9);
+      const pdf = normalPDF((x - opponentW) / sigmaOpp) / sigmaOpp;
+      return contest * pdf;
+    }, lo, hi);
+    return c_m + contestExpected;
+  };
 
   // Benefit: ΔA(K) · V/2 (deterrence value in catastrophic regime)
   const benefit = (K: number): number => deltaA(K) * V / 2;
@@ -198,31 +207,67 @@ export function computeSignalingCutoff(
  * Compute probability of catastrophe (war without DSA)
  * Catastrophe = at least one state attacks AND neither has DSA
  *
- * P(Catastrophe) = P(War) × P(|K₁ - K₂| < T | War)
+ * Decomposed into 3 cases:
+ *   A: State 1 attacks, state 2 doesn't (K₁ ≥ k*₁, K₂ < k*₂)
+ *   B: State 2 attacks, state 1 doesn't (K₂ ≥ k*₂, K₁ < k*₁)
+ *   C: Both attack (K₁ ≥ k*₁, K₂ ≥ k*₂)
  *
- * We approximate by: P(War) × P(|K₁ - K₂| < T)
- * This slightly overestimates since war is more likely when gaps are large.
- *
- * With asymmetric sigma:
- * K_1 - K_2 ~ N(w_1 - w_2, σ₁² + σ₂²)
+ * For each case, P(case ∧ |K₁-K₂| < T) is computed as a 1D integral
+ * where the inner integral over one state evaluates analytically to
+ * normalCDF differences.
  */
 export function computeCatastropheProbability(
   params: ModelParameters,
-  warProbability: number
+  attackCutoff1: number,
+  attackCutoff2: number
 ): number {
   const { w1, w2, sigma1, sigma2, T } = params;
 
-  // Probability that neither has DSA: |K_1 - K_2| < T
-  // K_1 - K_2 ~ N(w_1 - w_2, σ₁² + σ₂²) since K_i = w_i + ε_i with ε_i ~ N(0, σᵢ²)
-  const meanDiff = w1 - w2;
-  const combinedSigma = Math.sqrt(sigma1 * sigma1 + sigma2 * sigma2);
+  // f_i(K) = normalPDF of K_i ~ N(w_i, σ_i²)
+  const f1 = (K: number) => normalPDF((K - w1) / sigma1) / sigma1;
 
-  // P(-T < K_1 - K_2 < T) = Φ((T - meanDiff)/combinedσ) - Φ((-T - meanDiff)/combinedσ)
-  const probNoDSA = normalCDF((T - meanDiff) / combinedSigma) -
-                    normalCDF((-T - meanDiff) / combinedSigma);
+  // P(K₂ ∈ [lo, hi)) where K₂ ~ N(w₂, σ₂²)
+  const probK2InRange = (lo: number, hi: number) =>
+    normalCDF((hi - w2) / sigma2) - normalCDF((lo - w2) / sigma2);
 
-  // P(Catastrophe) ≈ P(War) × P(neither has DSA)
-  return warProbability * probNoDSA;
+  // P(K₁ ∈ [lo, hi)) where K₁ ~ N(w₁, σ₁²)
+  const probK1InRange = (lo: number, hi: number) =>
+    normalCDF((hi - w1) / sigma1) - normalCDF((lo - w1) / sigma1);
+
+  const intLo1 = attackCutoff1;
+  const intHi1 = w1 + 6 * sigma1;
+  const intLo2 = attackCutoff2;
+  const intHi2 = w2 + 6 * sigma2;
+
+  // Case A: K₁ ≥ k*₁, K₂ < k*₂, |K₁-K₂| < T
+  // Inner: K₂ ∈ (K₁-T, min(k*₂, K₁+T))
+  const caseA = intHi1 > intLo1 ? integrate((K1: number) => {
+    const k2Lo = K1 - T;
+    const k2Hi = Math.min(attackCutoff2, K1 + T);
+    if (k2Hi <= k2Lo) return 0;
+    return f1(K1) * probK2InRange(k2Lo, k2Hi);
+  }, intLo1, Math.max(intLo1, intHi1)) : 0;
+
+  // Case B: K₂ ≥ k*₂, K₁ < k*₁, |K₁-K₂| < T
+  // Inner: K₁ ∈ (K₂-T, min(k*₁, K₂+T))
+  const f2 = (K: number) => normalPDF((K - w2) / sigma2) / sigma2;
+  const caseB = intHi2 > intLo2 ? integrate((K2: number) => {
+    const k1Lo = K2 - T;
+    const k1Hi = Math.min(attackCutoff1, K2 + T);
+    if (k1Hi <= k1Lo) return 0;
+    return f2(K2) * probK1InRange(k1Lo, k1Hi);
+  }, intLo2, Math.max(intLo2, intHi2)) : 0;
+
+  // Case C: K₁ ≥ k*₁, K₂ ≥ k*₂, |K₁-K₂| < T
+  // Inner: K₂ ∈ (max(k*₂, K₁-T), K₁+T)
+  const caseC = intHi1 > intLo1 ? integrate((K1: number) => {
+    const k2Lo = Math.max(attackCutoff2, K1 - T);
+    const k2Hi = K1 + T;
+    if (k2Hi <= k2Lo) return 0;
+    return f1(K1) * probK2InRange(k2Lo, k2Hi);
+  }, intLo1, Math.max(intLo1, intHi1)) : 0;
+
+  return Math.max(0, caseA + caseB + caseC);
 }
 
 /**
@@ -280,30 +325,104 @@ export function computeMinorConflictProbability(
 }
 
 /**
+ * Compute DSA victory probabilities (unconditional)
+ * Uses the distribution of K₁ - K₂ ~ N(w₁ - w₂, σ₁² + σ₂²)
+ */
+export function computeDSAVictoryProbabilities(params: ModelParameters): {
+  dsa1: number;
+  dsa2: number;
+} {
+  const { w1, w2, sigma1, sigma2, T } = params;
+  const combinedSigma = Math.sqrt(sigma1 * sigma1 + sigma2 * sigma2);
+  const meanDiff = w1 - w2;
+  return {
+    dsa1: 1 - normalCDF((T - meanDiff) / combinedSigma),
+    dsa2: 1 - normalCDF((T + meanDiff) / combinedSigma),
+  };
+}
+
+/**
+ * Compute E[L(K) | K in signaling region] for a single state.
+ *
+ * L(K) = c_m + E[K·K_j/(K+K_j)] is the minor conflict cost at capability K.
+ * This integrates L(K)·f(K) over [signalingCutoff, attackCutoff) and divides
+ * by P(K in signaling region) to get the conditional expectation.
+ *
+ * The inner integral (contest term) uses 15-point quadrature, and the outer
+ * integral over K also uses 15-point quadrature: 225 evaluations total.
+ */
+export function computeExpectedMinorCost(
+  params: ModelParameters,
+  signalingCutoff: number,
+  attackCutoff: number,
+  ownW: number,
+  ownSigma: number,
+  opponentW: number,
+  opponentSigma: number
+): number {
+  const { c_m } = params;
+
+  // P(K in signaling region)
+  const probSignal =
+    normalCDF((attackCutoff - ownW) / ownSigma) -
+    normalCDF((signalingCutoff - ownW) / ownSigma);
+
+  if (probSignal < 1e-12) return c_m; // fallback if no signaling region
+
+  // L(K) for a given K: c_m + E[K·K_j/(K+K_j)]
+  const L = (K: number): number => {
+    const lo = Math.max(0.01, opponentW - 5 * opponentSigma);
+    const hi = opponentW + 5 * opponentSigma;
+    const contestExpected = integrate((x: number) => {
+      const contest = K * x / (K + x + 1e-9);
+      const pdf = normalPDF((x - opponentW) / opponentSigma) / opponentSigma;
+      return contest * pdf;
+    }, lo, hi);
+    return c_m + contestExpected;
+  };
+
+  // Integrate L(K) · f_own(K) over [signalingCutoff, attackCutoff)
+  const intLo = signalingCutoff;
+  const intHi = attackCutoff;
+  if (intHi <= intLo) return c_m;
+
+  const expectedLTimesProb = integrate((K: number) => {
+    const pdf = normalPDF((K - ownW) / ownSigma) / ownSigma;
+    return L(K) * pdf;
+  }, intLo, intHi);
+
+  return expectedLTimesProb / probSignal;
+}
+
+/**
  * Compute full equilibrium prediction from parameters
+ *
+ * If investmentMode is on, first resolves w/σ from investment levels.
  *
  * With asymmetric sigma (σ₁ ≠ σ₂):
  * - State 1's attack cutoff uses opponent's w₂ and σ₂
  * - State 2's attack cutoff uses opponent's w₁ and σ₁
  * - Probability calculations use each state's own σᵢ
  */
-export function computeEquilibrium(params: ModelParameters): EquilibriumPrediction {
+export function computeEquilibrium(inputParams: ModelParameters): EquilibriumPrediction {
+  // Resolve investment-derived params if needed
+  const params = resolveParams(inputParams);
   const { V, theta, w1, w2, sigma1, sigma2 } = params;
 
   // 1. Compute attack threshold τ = (V/2 + θ)/(V + θ)
   const tau = computeTau(V, theta);
 
-  // 2. Compute state-specific attack cutoffs with no signal
-  // State 1's cutoff k*₁(0) uses opponent's w2 and σ2
+  // 2. Compute k*(0) — attack cutoff with no signal (one-sided, paper's model)
   const attackCutoff1NoSignal = computeAttackCutoff(params, 0, tau, w2, sigma2);
-  // State 2's cutoff k*₂(0) uses opponent's w1 and σ1
   const attackCutoff2NoSignal = computeAttackCutoff(params, 0, tau, w1, sigma1);
 
-  // 3. Compute state-specific signaling cutoffs
-  // State 1's K̂₁: own w/σ is w1/σ1, opponent w/σ is w2/σ2
-  const signalingCutoff1 = computeSignalingCutoffForState(params, tau, attackCutoff1NoSignal, w1, w2, sigma1, sigma2);
-  // State 2's K̂₂: own w/σ is w2/σ2, opponent w/σ is w1/σ1
-  const signalingCutoff2 = computeSignalingCutoffForState(params, tau, attackCutoff2NoSignal, w2, w1, sigma2, sigma1);
+  // 3. Compute K̂ — signaling cutoff (single-pass backward induction, paper's model)
+  const signalingCutoff1 = computeSignalingCutoffForState(
+    params, tau, attackCutoff1NoSignal, w1, w2, sigma1, sigma2
+  );
+  const signalingCutoff2 = computeSignalingCutoffForState(
+    params, tau, attackCutoff2NoSignal, w2, w1, sigma2, sigma1
+  );
 
   // 4. Compute probabilities for each state using their own cutoffs and σᵢ
   // P(state 1 doesn't attack) = Φ((k*₁(0) - w₁)/σ₁)
@@ -326,12 +445,57 @@ export function computeEquilibrium(params: ModelParameters): EquilibriumPredicti
     attackCutoff2NoSignal
   );
 
-  // Catastrophe = war AND neither has DSA
-  const catastropheProbability = computeCatastropheProbability(params, warProbability);
+  // Catastrophe = war AND neither has DSA (exact semi-analytical computation)
+  const catastropheProbability = computeCatastropheProbability(params, attackCutoff1NoSignal, attackCutoff2NoSignal);
 
   // Legacy values for backward compatibility (use averages)
   const attackCutoffNoSignal = (attackCutoff1NoSignal + attackCutoff2NoSignal) / 2;
   const signalingCutoff = (signalingCutoff1 + signalingCutoff2) / 2;
+
+  // DSA victory probabilities: war = DSA₁ + DSA₂ + catastrophe
+  // Derive from exact quantities so they sum correctly
+  const totalDSAProbability = Math.max(0, warProbability - catastropheProbability);
+  const dsaProbs = computeDSAVictoryProbabilities(params);
+  const dsaRatioSum = dsaProbs.dsa1 + dsaProbs.dsa2;
+  const dsaVictory1Probability = dsaRatioSum > 0
+    ? totalDSAProbability * (dsaProbs.dsa1 / dsaRatioSum)
+    : 0;
+  const dsaVictory2Probability = dsaRatioSum > 0
+    ? totalDSAProbability * (dsaProbs.dsa2 / dsaRatioSum)
+    : 0;
+
+  // Expected payoffs with wealth endowment
+  const I1_cost = inputParams.investmentMode ? inputParams.I1 : 0;
+  const I2_cost = inputParams.investmentMode ? inputParams.I2 : 0;
+
+  // E[L(K) | signal] for each state (includes contest term E[K·K_j/(K+K_j)])
+  const expectedMinorCost1 = computeExpectedMinorCost(
+    params, signalingCutoff1, attackCutoff1NoSignal, w1, sigma1, w2, sigma2
+  );
+  const expectedMinorCost2 = computeExpectedMinorCost(
+    params, signalingCutoff2, attackCutoff2NoSignal, w2, sigma2, w1, sigma1
+  );
+  // Average the conditional costs, weighted by each state's signaling probability
+  const probSig1 = normalCDF((attackCutoff1NoSignal - w1) / sigma1) - normalCDF((signalingCutoff1 - w1) / sigma1);
+  const probSig2 = normalCDF((attackCutoff2NoSignal - w2) / sigma2) - normalCDF((signalingCutoff2 - w2) / sigma2);
+  const totalSigProb = Math.max(1e-12, probSig1 + probSig2);
+  const avgMinorCost = (probSig1 * expectedMinorCost1 + probSig2 * expectedMinorCost2) / totalSigProb;
+  const minorCostTotal = minorConflictProbability * avgMinorCost;
+
+  const expectedPayoff1 = Math.max(0,
+    peaceProbability * (inputParams.W1 - I1_cost + V / 2)
+    + dsaVictory1Probability * (inputParams.W1 - I1_cost + V)
+    + dsaVictory2Probability * 0 // enemy DSA = total loss
+    + catastropheProbability * Math.max(0, inputParams.W1 - I1_cost - theta)
+    - minorCostTotal
+  );
+  const expectedPayoff2 = Math.max(0,
+    peaceProbability * (inputParams.W2 - I2_cost + V / 2)
+    + dsaVictory2Probability * (inputParams.W2 - I2_cost + V)
+    + dsaVictory1Probability * 0 // enemy DSA = total loss
+    + catastropheProbability * Math.max(0, inputParams.W2 - I2_cost - theta)
+    - minorCostTotal
+  );
 
   return {
     tau,
@@ -347,6 +511,11 @@ export function computeEquilibrium(params: ModelParameters): EquilibriumPredicti
     // Legacy values (averages)
     attackCutoffNoSignal,
     signalingCutoff,
+    // DSA victory and expected payoffs
+    dsaVictory1Probability,
+    dsaVictory2Probability,
+    expectedPayoff1,
+    expectedPayoff2,
   };
 }
 

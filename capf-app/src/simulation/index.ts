@@ -5,3 +5,4 @@
 export * from './math';
 export * from './equilibrium';
 export * from './engine';
+export * from './investment';

@@ -28,7 +28,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-green-300',
     bgColor: 'bg-green-900/20',
     borderColor: 'border-green-800/50',
-    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 3.5, c_m: 1, V: 40, theta: 180 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 3.5, c_m: 1, V: 40, theta: 180, investmentMode: false, I1: 10, I2: 10, investmentLinked: true, W1: 40, W2: 40, wealthLinked: true },
   },
   {
     id: 'preemptive-strike',
@@ -41,7 +41,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-red-300',
     bgColor: 'bg-red-900/20',
     borderColor: 'border-red-800/50',
-    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1.5, sigma2: 1.5, sigmaLinked: true, T: 0.5, c_m: 1, V: 100, theta: 20 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1.5, sigma2: 1.5, sigmaLinked: true, T: 0.5, c_m: 1, V: 100, theta: 20, investmentMode: false, I1: 10, I2: 10, investmentLinked: true, W1: 100, W2: 100, wealthLinked: true },
   },
   {
     id: 'rand-nightmare',
@@ -53,7 +53,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-orange-300',
     bgColor: 'bg-orange-900/20',
     borderColor: 'border-orange-800/50',
-    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1.5, sigma2: 1.5, sigmaLinked: true, T: 2, c_m: 4.5, V: 70, theta: 80 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1.5, sigma2: 1.5, sigmaLinked: true, T: 2, c_m: 4.5, V: 70, theta: 80, investmentMode: false, I1: 10, I2: 10, investmentLinked: true, W1: 70, W2: 70, wealthLinked: true },
   },
   {
     id: 'cheap-talk',
@@ -66,7 +66,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-cyan-300',
     bgColor: 'bg-cyan-900/20',
     borderColor: 'border-cyan-800/50',
-    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 2, c_m: 0.1, V: 50, theta: 100 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 2, c_m: 0.1, V: 50, theta: 100, investmentMode: false, I1: 10, I2: 10, investmentLinked: true, W1: 50, W2: 50, wealthLinked: true },
   },
   {
     id: 'high-stakes',
@@ -78,7 +78,7 @@ const SCENARIOS: Scenario[] = [
     color: 'text-purple-300',
     bgColor: 'bg-purple-900/20',
     borderColor: 'border-purple-800/50',
-    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 2, c_m: 1, V: 100, theta: 100 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 2, c_m: 1, V: 100, theta: 100, investmentMode: false, I1: 10, I2: 10, investmentLinked: true, W1: 100, W2: 100, wealthLinked: true },
   },
   {
     id: 'fog-of-war',
@@ -90,7 +90,31 @@ const SCENARIOS: Scenario[] = [
     color: 'text-gray-300',
     bgColor: 'bg-gray-800/50',
     borderColor: 'border-gray-600/50',
-    params: { w1: 5, w2: 5, wLinked: true, sigma1: 3, sigma2: 3, sigmaLinked: true, T: 2, c_m: 1, V: 50, theta: 100 },
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 3, sigma2: 3, sigmaLinked: true, T: 2, c_m: 1, V: 50, theta: 100, investmentMode: false, I1: 10, I2: 10, investmentLinked: true, W1: 50, W2: 50, wealthLinked: true },
+  },
+  {
+    id: 'arms-race',
+    name: 'Arms Race',
+    tagline: 'Spending drives instability',
+    description:
+      'Both states invest heavily in AI R&D. Higher investment means higher capability ' +
+      'but also more uncertainty. Find the Nash Equilibrium to see if restraint pays off.',
+    color: 'text-emerald-300',
+    bgColor: 'bg-emerald-900/20',
+    borderColor: 'border-emerald-800/50',
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 2, c_m: 1, V: 50, theta: 100, investmentMode: true, I1: 50, I2: 50, investmentLinked: true, W1: 50, W2: 50, wealthLinked: true },
+  },
+  {
+    id: 'asymmetric-investment',
+    name: 'Asymmetric Investment',
+    tagline: 'One state vastly outspends',
+    description:
+      'The US invests 4x more than China in AI R&D. Does the lead translate to DSA, ' +
+      'or does the higher uncertainty create catastrophe risk?',
+    color: 'text-amber-300',
+    bgColor: 'bg-amber-900/20',
+    borderColor: 'border-amber-800/50',
+    params: { w1: 5, w2: 5, wLinked: true, sigma1: 1, sigma2: 1, sigmaLinked: true, T: 2, c_m: 1, V: 50, theta: 100, investmentMode: true, I1: 80, I2: 20, investmentLinked: false, W1: 50, W2: 50, wealthLinked: true },
   },
 ];
 
@@ -106,7 +130,7 @@ export function ScenarioChips() {
   const activeScenario = SCENARIOS.find((s) =>
     Object.entries(s.params).every(([key, value]) => {
       const currentValue = currentParams[key as keyof ModelParameters];
-      // Handle boolean fields (wLinked, sigmaLinked)
+      // Handle boolean fields (wLinked, sigmaLinked, investmentMode, investmentLinked)
       if (typeof value === 'boolean') {
         return currentValue === value;
       }

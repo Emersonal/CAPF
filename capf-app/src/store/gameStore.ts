@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import type { ModelParameters, GameState, RoundPhase } from '../models/types';
+import type { ModelParameters, GameState, RoundPhase, InvestmentResult } from '../models/types';
 import { DEFAULT_PARAMETERS } from '../models/types';
 import {
   createInitialGameState,
@@ -13,11 +13,16 @@ import {
   simulateRound,
 } from '../simulation/engine';
 import { computeEquilibrium } from '../simulation/equilibrium';
+import { solveGTO, investmentToW, investmentToSigma } from '../simulation/investment';
 
 /**
  * Store state interface
  */
 interface GameStore extends GameState {
+  // Investment GTO result
+  gtoResult: InvestmentResult | null;
+  gtoSolving: boolean;
+
   // Actions
   updateParameter: <K extends keyof ModelParameters>(
     param: K,
@@ -32,6 +37,8 @@ interface GameStore extends GameState {
   startRound: () => void;
   advancePhase: () => void;
   completeRound: () => void;
+  // Investment actions
+  runGTOSolver: () => void;
 }
 
 /**
@@ -43,9 +50,11 @@ export const useGameStore = create<GameStore>((set, get) => {
   return {
     // Initial state
     ...initialState,
+    gtoResult: null,
+    gtoSolving: false,
 
     // Update a single parameter and recompute equilibrium
-    // Handles linked parameters: when w or sigma is linked, updates both values together
+    // Handles linked parameters: when w or sigma or investment is linked, updates both values together
     updateParameter: (param, value) => {
       set((state) => {
         const newParams = { ...state.parameters, [param]: value };
@@ -59,6 +68,14 @@ export const useGameStore = create<GameStore>((set, get) => {
           newParams.sigma2 = value as number;
         } else if (param === 'sigma2' && newParams.sigmaLinked) {
           newParams.sigma1 = value as number;
+        } else if (param === 'I1' && newParams.investmentLinked) {
+          newParams.I2 = value as number;
+        } else if (param === 'I2' && newParams.investmentLinked) {
+          newParams.I1 = value as number;
+        } else if (param === 'W1' && newParams.wealthLinked) {
+          newParams.W2 = value as number;
+        } else if (param === 'W2' && newParams.wealthLinked) {
+          newParams.W1 = value as number;
         }
 
         // When linking params, sync the values
@@ -66,6 +83,28 @@ export const useGameStore = create<GameStore>((set, get) => {
           newParams.w2 = newParams.w1;
         } else if (param === 'sigmaLinked' && value === true) {
           newParams.sigma2 = newParams.sigma1;
+        } else if (param === 'investmentLinked' && value === true) {
+          newParams.I2 = newParams.I1;
+        } else if (param === 'wealthLinked' && value === true) {
+          newParams.W2 = newParams.W1;
+        }
+
+        // When toggling investment mode, sync derived values
+        if (param === 'investmentMode') {
+          if (value === true) {
+            // Switching to investment mode: keep current I values
+            // w/σ will be derived automatically
+          } else {
+            // Switching to manual: preserve current derived w/σ values
+            if (state.parameters.investmentMode) {
+              newParams.w1 = investmentToW(state.parameters.I1);
+              newParams.w2 = investmentToW(state.parameters.I2);
+              newParams.sigma1 = investmentToSigma(state.parameters.I1);
+              newParams.sigma2 = investmentToSigma(state.parameters.I2);
+              newParams.wLinked = false;
+              newParams.sigmaLinked = false;
+            }
+          }
         }
 
         const newEquilibrium = computeEquilibrium(newParams);
@@ -73,6 +112,7 @@ export const useGameStore = create<GameStore>((set, get) => {
         return {
           parameters: newParams,
           equilibriumPrediction: newEquilibrium,
+          gtoResult: null, // Clear GTO result when params change
         };
       });
     },
@@ -138,14 +178,16 @@ export const useGameStore = create<GameStore>((set, get) => {
       const outcome = simulateRound(state);
       set({
         pendingOutcome: outcome,
-        currentPhase: 'date1',
+        currentPhase: state.parameters.investmentMode ? 'date0' : 'date1',
       });
     },
 
     // Advance to next phase in step-by-step mode
     advancePhase: () => {
       const state = get();
-      const phaseOrder: RoundPhase[] = ['idle', 'date1', 'date2', 'date3', 'outcome'];
+      const phaseOrder: RoundPhase[] = state.parameters.investmentMode
+        ? ['idle', 'date0', 'date1', 'date2', 'date3', 'outcome']
+        : ['idle', 'date1', 'date2', 'date3', 'outcome'];
       const currentIndex = phaseOrder.indexOf(state.currentPhase);
 
       if (currentIndex === -1 || currentIndex >= phaseOrder.length - 1) {
@@ -171,6 +213,30 @@ export const useGameStore = create<GameStore>((set, get) => {
         pendingOutcome: null,
       });
     },
+
+    // Run GTO solver to find Nash Equilibrium investment levels
+    runGTOSolver: () => {
+      set({ gtoSolving: true });
+      // Use setTimeout to allow UI to show spinner before blocking computation
+      setTimeout(() => {
+        const state = get();
+        const result = solveGTO(state.parameters);
+
+        const newParams = {
+          ...state.parameters,
+          I1: result.I1,
+          I2: result.I2,
+        };
+        const newEquilibrium = computeEquilibrium(newParams);
+
+        set({
+          parameters: newParams,
+          equilibriumPrediction: newEquilibrium,
+          gtoResult: result,
+          gtoSolving: false,
+        });
+      }, 10);
+    },
   };
 });
 
@@ -187,6 +253,12 @@ export const useCurrentPhase = () => useGameStore((state) => state.currentPhase)
 export const usePendingOutcome = () => useGameStore((state) => state.pendingOutcome);
 
 /**
+ * Investment selector hooks
+ */
+export const useGTOResult = () => useGameStore((state) => state.gtoResult);
+export const useGTOSolving = () => useGameStore((state) => state.gtoSolving);
+
+/**
  * Action hooks
  */
 export const useUpdateParameter = () => useGameStore((state) => state.updateParameter);
@@ -196,3 +268,4 @@ export const useTogglePlay = () => useGameStore((state) => state.togglePlay);
 export const useStartRound = () => useGameStore((state) => state.startRound);
 export const useAdvancePhase = () => useGameStore((state) => state.advancePhase);
 export const useCompleteRound = () => useGameStore((state) => state.completeRound);
+export const useRunGTOSolver = () => useGameStore((state) => state.runGTOSolver);
