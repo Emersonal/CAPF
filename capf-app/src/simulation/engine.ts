@@ -5,6 +5,7 @@
 
 import { sampleNormal } from './math';
 import { computeEquilibrium, computeAttackCutoff } from './equilibrium';
+import { resolveParams } from './investment';
 import type {
   ModelParameters,
   GameState,
@@ -44,14 +45,15 @@ export function createInitialGameState(
   params: ModelParameters = DEFAULT_PARAMETERS
 ): GameState {
   const equilibrium = computeEquilibrium(params);
+  const resolved = resolveParams(params);
 
   return {
     round: 1,
     date: 1,
     parameters: params,
     actors: [
-      createInitialActor('state1', 'United States', params.w1),
-      createInitialActor('state2', 'China', params.w2),
+      createInitialActor('state1', 'United States', resolved.w1),
+      createInitialActor('state2', 'China', resolved.w2),
     ],
     history: [],
     equilibriumPrediction: equilibrium,
@@ -66,12 +68,13 @@ export function createInitialGameState(
  * K_i = w_i + ε_i, where ε_i ~ N(0, σᵢ²)
  *
  * With asymmetric sigma, each state draws from its own distribution.
+ * If investmentMode is on, w and σ are derived from investment levels.
  */
 export function simulateDate1(
   state: GameState
 ): [ActorState, ActorState] {
-  const { parameters } = state;
-  const { w1, w2, sigma1, sigma2 } = parameters;
+  const resolved = resolveParams(state.parameters);
+  const { w1, w2, sigma1, sigma2 } = resolved;
 
   // State 1 (US) uses w1 and σ1, State 2 (China) uses w2 and σ2
   const actors: [ActorState, ActorState] = [
@@ -139,15 +142,14 @@ export function simulateDate3(
   actors: [ActorState, ActorState],
   equilibrium: EquilibriumPrediction
 ): [ActorState, ActorState] {
-  const { parameters } = state;
-  const { w1, w2, sigma1, sigma2 } = parameters;
+  const resolved = resolveParams(state.parameters);
+  const { w1, w2, sigma1, sigma2 } = resolved;
   const tau = equilibrium.tau;
 
   // Compute attack cutoffs based on opponent's revealed signal
-  // State 1's cutoff uses opponent State 2's w (w2) and σ (σ2)
-  const kStar1 = computeAttackCutoff(parameters, actors[1].revealedLowerBound, tau, w2, sigma2);
-  // State 2's cutoff uses opponent State 1's w (w1) and σ (σ1)
-  const kStar2 = computeAttackCutoff(parameters, actors[0].revealedLowerBound, tau, w1, sigma1);
+  // k*(y_j) = w + T + σ·Φ⁻¹(B_j + (1-B_j)τ) — paper's one-sided lower truncation
+  const kStar1 = computeAttackCutoff(resolved, actors[1].revealedLowerBound, tau, w2, sigma2);
+  const kStar2 = computeAttackCutoff(resolved, actors[0].revealedLowerBound, tau, w1, sigma1);
 
   return [
     {
@@ -178,13 +180,18 @@ export function determineOutcome(
   const Z1 = actor1.majorAttackChoice;
   const Z2 = actor2.majorAttackChoice;
 
+  const W1 = parameters.W1;
+  const W2 = parameters.W2;
+  const I1_cost = parameters.investmentMode ? parameters.I1 : 0;
+  const I2_cost = parameters.investmentMode ? parameters.I2 : 0;
+
   let outcome: RoundOutcomeType;
   let payoffs: [number, number];
 
   if (!Z1 && !Z2) {
     // Peace: both choose not to attack
     outcome = 'peace';
-    payoffs = [V / 2, V / 2];
+    payoffs = [W1 - I1_cost + V / 2, W2 - I2_cost + V / 2];
   } else {
     // War: at least one attacks
     const state1HasDSA = K1 >= K2 + T;
@@ -192,25 +199,33 @@ export function determineOutcome(
 
     if (state1HasDSA) {
       outcome = 'dsa_victory_1';
-      payoffs = [V, 0];
+      payoffs = [W1 - I1_cost + V, 0]; // Loser gets 0, no deductions
     } else if (state2HasDSA) {
       outcome = 'dsa_victory_2';
-      payoffs = [0, V];
+      payoffs = [0, W2 - I2_cost + V]; // Loser gets 0, no deductions
     } else {
       // Neither has DSA - catastrophe!
       outcome = 'catastrophe';
-      payoffs = [-theta, -theta];
+      payoffs = [
+        Math.max(0, W1 - I1_cost - theta),
+        Math.max(0, W2 - I2_cost - theta),
+      ];
     }
   }
 
-  // Subtract minor conflict costs if any occurred
+  // Subtract minor conflict costs (paid at Date 2, before outcome)
+  // but NOT from DSA losers (they've already lost everything)
   const y1 = actor1.minorConflictChoice;
   const y2 = actor2.minorConflictChoice;
   if (y1 > 0 || y2 > 0) {
     const minorCost = c_m + (y1 * y2) / (y1 + y2 || 1);
-    payoffs[0] -= minorCost;
-    payoffs[1] -= minorCost;
+    if (outcome !== 'dsa_victory_2') payoffs[0] -= minorCost; // State 1 isn't wiped out
+    if (outcome !== 'dsa_victory_1') payoffs[1] -= minorCost; // State 2 isn't wiped out
   }
+
+  // Floor at 0 — can't have negative wealth
+  payoffs[0] = Math.max(0, payoffs[0]);
+  payoffs[1] = Math.max(0, payoffs[1]);
 
   return { outcome, payoffs };
 }
