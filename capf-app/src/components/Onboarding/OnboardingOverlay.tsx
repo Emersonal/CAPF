@@ -11,26 +11,83 @@ interface OnboardingOverlayProps {
 
 const STEPS = [
   {
-    title: 'Welcome to DSA Simulator',
-    subtitle: 'Decisive Strategic Advantage Signaling Game',
+    title: 'Decisive Strategic Advantage',
+    subtitle: 'What DSA Means',
     content: (
       <>
         <p className="text-gray-300 leading-relaxed">
-          This is an interactive simulation that models what happens when rival superpowers
-          race toward superintelligent AI. It's built on real game-theoretic research from
-          the national security and AI safety communities.
+          A <span className="text-white font-medium">Decisive Strategic Advantage</span> (DSA)
+          is a gap in AI capability so large that one state could defeat all rivals at
+          negligible cost to itself. This goes beyond conventional military superiority —
+          DSA means the contest is effectively already decided before it begins.
+        </p>
+        <p className="text-gray-400 mt-3 leading-relaxed">
+          The concept isn't new — but AI changes the picture.
+        </p>
+        <div className="mt-5 space-y-3">
+          <div className="flex gap-3">
+            <span className="text-blue-400 text-lg mt-0.5">1</span>
+            <div>
+              <p className="text-white text-sm font-medium">Counterforce First Strike</p>
+              <p className="text-gray-400 text-sm">
+                The closest historical analogue is nuclear counterforce: destroying an
+                enemy's arsenal before they can retaliate. That's a DSA — one side wins
+                before the contest begins.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <span className="text-blue-400 text-lg mt-0.5">2</span>
+            <div>
+              <p className="text-white text-sm font-medium">Beyond Nuclear</p>
+              <p className="text-gray-400 text-sm">
+                DSA could emerge in other domains too: cyber warfare, autonomous weapons,
+                or any capability gap large enough to make resistance futile.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <span className="text-blue-400 text-lg mt-0.5">3</span>
+            <div>
+              <p className="text-white text-sm font-medium">Automated Research</p>
+              <p className="text-gray-400 text-sm">
+                What makes this newly plausible is advanced AI that can accelerate its own
+                R&D. Automated research could let one state pull ahead fast enough to open
+                a decisive gap before rivals can respond.
+              </p>
+            </div>
+          </div>
+        </div>
+      </>
+    ),
+  },
+  {
+    title: 'The Strategic Problem',
+    subtitle: 'Signaling Under Uncertainty',
+    content: (
+      <>
+        <p className="text-gray-300 leading-relaxed">
+          Because capability is private, states face a <span className="text-white font-medium">signaling
+          game</span>. Each knows its own AI strength but not its rival's. This
+          uncertainty is what makes the situation unstable — and what makes deterrence
+          both necessary and fragile.
         </p>
         <p className="text-gray-400 mt-4 leading-relaxed">
-          You don't need to have read the papers. This walkthrough will explain everything:
-          the strategic landscape, the math, and how to use the simulator.
+          States can try to reveal strength through proxy conflicts or demonstrations,
+          but signaling is costly and may provoke the very escalation it aims to prevent.
+          The result is a strategic landscape where small changes in assumptions —
+          about observability, risk tolerance, or the value of dominance — produce
+          radically different equilibria.
         </p>
         <div className="mt-6 p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg">
-          <p className="text-blue-300 text-sm font-medium">The core question:</p>
-          <p className="text-blue-200 mt-1">
-            Can mutual threats of sabotage keep the AI race stable? Or do they make
-            everything more dangerous?
+          <p className="text-blue-200">
+            This simulator lets you explore when deterrence holds and when it breaks
+            down — by adjusting the assumptions that drive each outcome.
           </p>
         </div>
+        <p className="text-gray-500 mt-4 text-sm">
+          No prior reading required. The next slides cover the key papers and the formal model.
+        </p>
       </>
     ),
   },
@@ -161,6 +218,40 @@ const STEPS = [
             </div>
           </div>
         </div>
+
+        <div className="mt-5 p-3 bg-emerald-900/20 border border-emerald-800/50 rounded-lg">
+          <p className="text-emerald-300 text-sm font-medium">Investment Mode</p>
+          <p className="text-gray-400 text-sm mt-1">
+            Toggle <span className="text-emerald-300">Investment Mode</span> to add a
+            "Date 0" pregame where states choose R&D spending (I). Their investment
+            determines capability (w) and uncertainty ({'\u03C3'}) endogenously.
+          </p>
+        </div>
+
+        <div className="mt-4 p-3 bg-gray-800 rounded-lg">
+          <p className="text-white text-sm font-medium mb-2">Payoff Structure</p>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between">
+              <span className="text-green-300">Peace</span>
+              <span className="text-gray-400">W - I + V/2</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-blue-300">DSA Winner</span>
+              <span className="text-gray-400">W - I + V</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-red-300">DSA Loser</span>
+              <span className="text-gray-400">0 (total wipeout)</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-yellow-300">Catastrophe</span>
+              <span className="text-gray-400">max(0, W - I - {'\u03B8'})</span>
+            </div>
+          </div>
+          <p className="text-gray-500 text-xs mt-2">
+            W = wealth, I = investment (0 in manual mode), V = prize, {'\u03B8'} = catastrophe cost
+          </p>
+        </div>
       </>
     ),
   },
@@ -171,10 +262,9 @@ const STEPS = [
       <>
         <div className="space-y-4 text-sm">
           <div className="p-3 bg-gray-800 rounded-lg">
-            <p className="text-white font-medium mb-1">Left Panel — Parameters</p>
+            <p className="text-white font-medium mb-1">Game Structure — 4 Global Parameters</p>
             <p className="text-gray-400">
-              Six sliders control the strategic landscape. Adjust them and watch the
-              equilibrium predictions update in real time on the right.
+              These shape the strategic landscape for both states equally.
             </p>
             <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
               <span className="text-blue-300">T (DSA Threshold)</span>
@@ -183,27 +273,40 @@ const STEPS = [
               <span className="text-gray-500">How much does winning matter?</span>
               <span className="text-blue-300">{'\u03B8'} (Catastrophe Cost)</span>
               <span className="text-gray-500">How bad is mutual destruction?</span>
-              <span className="text-blue-300">{'\u03C3'} (Uncertainty)</span>
-              <span className="text-gray-500">How unpredictable are outcomes?</span>
               <span className="text-blue-300">c_m (Conflict Cost)</span>
               <span className="text-gray-500">How expensive is signaling?</span>
-              <span className="text-blue-300">w (Base Capability)</span>
-              <span className="text-gray-500">Starting power level</span>
             </div>
           </div>
           <div className="p-3 bg-gray-800 rounded-lg">
-            <p className="text-white font-medium mb-1">Right Panel — Run Simulation</p>
+            <p className="text-white font-medium mb-1">State Endowments — W</p>
             <p className="text-gray-400">
-              Click <span className="text-blue-300">Run Round</span> to play one game, or
-              hit <span className="text-green-300">Auto</span> to watch rounds play out
-              continuously. Each round shows what happened and why.
+              Each state has a <span className="text-white">wealth endowment (W)</span> representing
+              total national resources. Use <span className="text-blue-300">Split by state</span> to
+              give each state a different W, modeling asymmetric economies.
             </p>
           </div>
           <div className="p-3 bg-gray-800 rounded-lg">
-            <p className="text-white font-medium mb-1">Center — Scenario Presets</p>
+            <p className="text-white font-medium mb-1">State Capabilities — Two Modes</p>
+            <div className="mt-1 space-y-2">
+              <p className="text-gray-400">
+                <span className="text-white">Manual:</span> Set w (base capability) and
+                {' '}{'\u03C3'} (uncertainty) directly. Each is splittable per state.
+              </p>
+              <p className="text-gray-400">
+                <span className="text-emerald-300">Investment:</span> Set I (R&D spending) instead
+                — w and {'\u03C3'} are derived automatically. Use the{' '}
+                <span className="text-amber-300">Find Nash Equilibrium</span> button to let
+                the GTO solver compute optimal investments.
+              </p>
+            </div>
+          </div>
+          <div className="p-3 bg-gray-800 rounded-lg">
+            <p className="text-white font-medium mb-1">Running the Simulation</p>
             <p className="text-gray-400">
-              Try the preset scenarios to see how different assumptions produce wildly
-              different outcomes — from stable peace to catastrophe.
+              Click <span className="text-blue-300">Start Round</span> to step through one game,
+              or <span className="text-green-300">Auto</span> to watch rounds play out continuously.
+              Try the <span className="text-purple-300">Scenario Presets</span> to see how different
+              assumptions produce wildly different outcomes.
             </p>
           </div>
         </div>
