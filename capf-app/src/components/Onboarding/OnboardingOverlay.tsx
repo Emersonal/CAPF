@@ -151,10 +151,11 @@ const STEPS = [
         </p>
         <div className="mt-4 space-y-3 text-sm">
           <div className="p-3 bg-red-900/20 border border-red-800/30 rounded">
-            <p className="text-red-300 font-medium">Observability Failure</p>
+            <p className="text-red-300 font-medium">Capability Uncertainty</p>
             <p className="text-gray-400 mt-1">
-              AI progress is driven by software. There's no physical signature like a
-              uranium enrichment facility. How would you know when to strike?
+              You can't reliably assess how capable your rival's AI is — or how close
+              they are to a breakthrough. Without that knowledge, deterrence thresholds
+              become guesswork and red lines are unenforceable.
             </p>
           </div>
           <div className="p-3 bg-red-900/20 border border-red-800/30 rounded">
